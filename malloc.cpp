@@ -44,19 +44,33 @@ struct pairing_ptr_heap
 
 	static Tp mergePairs(Tp l)
 	{
-		if (!l) return NULL;
-		if (!l->right) return l;
+		if (!l || !l->right) return l;
+
 		Tp r = l->right;
 		Tp hs = r->right;
-		assert(hs != l && r != l);
-		// fixme recursion...
-		return merge(merge(l,r),mergePairs(hs));
+		l->right = r->right = NULL;
+		assert(hs != l && hs != r && r != l);
+		// FIXME recursion...
+		// We can use l->right after merge returns, since merge() always
+		// returns something with a right-value of NULL. l will never be
+		// touched until we're about to merge it with the result of mergePairs
+		l = merge(l,r);
+		hs = mergePairs(hs);
+		return merge(l,hs);
 	}
 
 	static Tp merge(Tp l, Tp r)
 	{
-		if (!l) return r;
-		if (!r) return l;
+		if (!l)
+		{
+			assert(!r->right);
+			return r;
+		}
+		if (!r)
+		{
+			assert(!l->right);
+			return l;
+		}
 
 		assert(!l->right && !r->right);
 
@@ -70,7 +84,7 @@ struct pairing_ptr_heap
 
 		r->right = l->down;
 		l->down = r;
-		l->right = NULL;
+		//l->right = NULL; // we know it's already null
 		return l;
 	}
 };
