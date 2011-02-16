@@ -28,17 +28,17 @@ struct pairing_ptr_heap
 	typedef pairing_ptr_heap* Tp;
 
 	/**
-	 * left,right: first child and right sibling of this page in pairing heap
+	 * down,right: first child and right sibling of this page in pairing heap
 	 * of pages with free space.
 	 */
-	pairing_ptr_heap* left;
+	pairing_ptr_heap* down;
 	pairing_ptr_heap* right;
 
 	Tp delete_min()
 	{
 		assert(!right);
-		Tp l = left;
-		left = NULL;
+		Tp l = down;
+		down = NULL;
 		return mergePairs(l);
 	}
 
@@ -60,15 +60,16 @@ struct pairing_ptr_heap
 
 		assert(!l->right && !r->right);
 
-		if (l < r)
+		if (r < l)
 		{
 			Tp tmp = r;
 			r = l;
 			l = tmp;
 		}
+		// l <= r!
 
-		r->right = l->left;
-		l->left = r;
+		r->right = l->down;
+		l->down = r;
 		l->right = NULL;
 		return l;
 	}
