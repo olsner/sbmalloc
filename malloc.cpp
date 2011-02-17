@@ -355,7 +355,7 @@ static pageinfo* new_chunkpage(size_t size)
 
 	size_t nchunks = 4096/size;
 	pageinfo* ret = NULL;
-	size_t pisize = sizeof(pageinfo) + nchunks/8;
+	size_t pisize = sizeof(pageinfo) + (nchunks+7)/8;
 	if (!g_chunk_pages[size_ix(pisize)])
 	{
 		ret = (pageinfo*)get_page();
@@ -374,7 +374,7 @@ static pageinfo* new_chunkpage(size_t size)
 	ret->chunks_free = nchunks;
 	ret->index = ix;
 
-	memset(ret->bitmap, 0xff, nchunks/8);
+	memset(ret->bitmap, 0xff, (nchunks+7)/8);
 
 	set_pageinfo(ret->page, ret);
 
