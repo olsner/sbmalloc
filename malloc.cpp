@@ -426,14 +426,16 @@ void *malloc(size_t size)
 		page = new_chunkpage(size);
 		*pagep = page;
 	}
-	debug("Allocating chunk from %p (info %p, %d left)\n", page->page, page, page->chunks_free);
+	debug("Allocating %d from %p (info %p, %d left)\n", size, page->page, page, page->chunks_free);
 	void* ret = page_get_chunk(page);
+	debug("Allocated %p (%d bytes)\n", ret, page->size);
 	if (unlikely(page_filled(page)))
 	{
 		debug("Page %p (info %p) filled\n", page->page, page);
 		pairing_ptr_heap* newpage = delete_min(&page->heap);
 		*pagep = newpage ? pageinfo_from_heap(newpage) : NULL;
 	}
+	assert(ret);
 	return ret;
 }
 
@@ -457,12 +459,19 @@ void* realloc(void* ptr, size_t new_size)
 	return ret;
 }
 
+static bool check_page_alignment(pageinfo* page, void* ptr)
+{
+	ptrdiff_t pos = (u8*)ptr - (u8*)page->page;
+	return !(pos % page->size);
+}
+
 void free(void *ptr)
 {
 	if (unlikely(!ptr)) return;
 
 	pageinfo* page = ptr_pageinfo(ptr);
 	if (unlikely(!page)) panic("free on unknown pointer %p", ptr);
+	assert(check_page_alignment(page, ptr));
 
 	bool was_filled = page_filled(page);
 
