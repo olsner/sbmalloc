@@ -255,6 +255,7 @@ static void set_pageinfo(void* page, pageinfo* info)
 static pageinfo* new_chunkpage(size_t size)
 {
 	size_t ix = size_ix(size);
+	assert(ix_size(ix) >= size);
 	size = ix_size(ix);
 
 	size_t nchunks = 4096/size;
@@ -305,11 +306,13 @@ void *malloc(size_t size)
 {
 	if (!size) return NULL;
 
+	assert(size < PAGE_SIZE / 2);
+
 	pageinfo** pagep = g_chunk_pages + size_ix(size);
 	pageinfo* page = *pagep;
 	if (unlikely(!page))
 	{
-		debug("Adding new chunk page for size %lu (cat %ld)\n", size, size_ix(size));
+		debug("Adding new chunk page for size %lu (cat %ld, size %ld)\n", size, size_ix(size), ix_size(size_ix(size)));
 		page = new_chunkpage(size);
 		*pagep = page;
 	}
