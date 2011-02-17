@@ -149,11 +149,9 @@ static bool page_filled(pageinfo* page)
 {
 	return !page->chunks_free;
 }
-static void* page_get_chunk(pageinfo* page)
+static int clear_first_set_bit(u8* bitmap, size_t maxbit)
 {
-	page->chunks_free--;
-	uint8_t* bitmap = page->bitmap;
-	for (size_t i = 0; i < page->chunks / 8; i++)
+	for (size_t i = 0; i < (maxbit + 7u) / 8u; i++)
 	{
 		const u8 found = bitmap[i];
 		if (found)
@@ -162,10 +160,12 @@ static void* page_get_chunk(pageinfo* page)
 			size_t n = i << 3;
 			while (mask)
 			{
+				assert(mask == (1 << (7 - (n & 7))));
+				assert(n >> 3 == i);
 				if (mask & found)
 				{
 					bitmap[i] = found & ~mask;
-					return (uint8_t*)page->page + (n * page->size);
+					return n;
 				}
 				mask >>= 1;
 				n++;
@@ -174,15 +174,28 @@ static void* page_get_chunk(pageinfo* page)
 	}
 	panic("No free chunks found?");
 }
+static void set_bit(u8* bitmap, size_t ix)
+{
+	const u8 mask = 1 << (7 - (ix & 7));
+	const size_t byte = ix >> 3;
+
+	assert(!(bitmap[byte] & mask));
+	bitmap[byte] |= mask;
+}
+static void* page_get_chunk(pageinfo* page)
+{
+	assert(page->chunks_free);
+	page->chunks_free--;
+	size_t n = clear_first_set_bit(page->bitmap, page->chunks);
+	return (u8*)page->page + (n * page->size);
+}
 static void page_free_chunk(pageinfo* page, void* ptr)
 {
 	size_t offset_in_page = (u8*)ptr - (u8*)page->page;
 	size_t ix = offset_in_page;
 	ix /= page->size; // FIXME store inverse or something instead
-	uint8_t mask = 1 << (7 - (ix & 7));
-	size_t byte = ix >> 3;
-	debug("Freeing %p in %p (size %d): oring byte %d with %#x\n", ptr, page->page, page->size, byte, mask);
-	page->bitmap[byte] |= mask;
+	debug("Freeing %p in %p (size %d)\n", ptr, page->page, page->size);
+	set_bit(page->bitmap, ix);
 	page->chunks_free++;
 }
 
