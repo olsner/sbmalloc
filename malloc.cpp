@@ -447,11 +447,12 @@ void* calloc(size_t n, size_t sz)
 
 void* realloc(void* ptr, size_t new_size)
 {
-	size_t old_size = get_alloc_size(ptr);
 	void* ret = malloc(new_size);
-	if (likely(ret))
+	if (likely(ret && ptr))
 	{
-		memcpy(ret, ptr, unlikely(new_size < old_size) ? new_size : old_size);
+		size_t old_size = get_alloc_size(ptr);
+		memcpy(ret, ptr, new_size < old_size ? new_size : old_size);
+		free(ptr);
 	}
 	return ret;
 }
