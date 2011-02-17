@@ -513,7 +513,7 @@ static int32_t xrand()
 
 const size_t DELAY = 100;
 const size_t NTESTS = 100000;
-const size_t MAXALLOC = 512;
+const size_t MAXALLOC = 4097;
 
 int main()
 {
@@ -548,5 +548,6 @@ int main()
 			assert(ptrs + j == p || !p[0] || ptrs[j] != p[0]);
 		}
 	}
+	printf("\"OK\"!\n");
 }
 #endif
