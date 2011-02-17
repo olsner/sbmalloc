@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 static void panic(const char* fmt, ...) __attribute__((noreturn));
+static void dump_pages();
 #define xassert(e) if (unlikely(e)); else panic("Assertion failed! " #e)
 
 typedef uint8_t u8;
@@ -212,13 +213,14 @@ static pageinfo** g_pages;
 
 static void panic(const char* fmt, ...)
 {
-	fflush(stdout);
-	fflush(stderr);
+	dump_pages();
 	va_list ap;
 	va_start(ap, fmt);
 	vfprintf(stderr, fmt, ap);
 	fprintf(stderr, "\n");
 	va_end(ap);
+	fflush(stdout);
+	fflush(stderr);
 	abort();
 }
 
