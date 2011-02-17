@@ -180,7 +180,7 @@ static void page_free_chunk(pageinfo* page, void* ptr)
 	page->chunks_free++;
 }
 
-#define N_SIZES (128/16+5)
+#define N_SIZES (128/16+4)
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 
