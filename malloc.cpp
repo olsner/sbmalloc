@@ -12,10 +12,11 @@
 #include <unistd.h>
 
 static void panic(const char* fmt, ...) __attribute__((noreturn));
+#define xassert(e) if (unlikely(e)); else panic("Assertion failed! " #e)
+
 
 #if defined DEBUG || defined TEST
 #define assert xassert
-#define xassert(e) if (e); else panic(#e)
 #else
 #define assert(...) (void)0
 #endif
