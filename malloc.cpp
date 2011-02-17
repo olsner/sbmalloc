@@ -219,8 +219,54 @@ static void* get_page()
 	{
 		uintptr_t cur = (uintptr_t)sbrk(0);
 		sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
-		return sbrk(PAGE_SIZE);
+		void* ret = sbrk(PAGE_SIZE);
+		debug("get_page: %p\n", ret);
+		return ret;
 	}
+}
+
+static void print_pageinfo(pageinfo* page)
+{
+	printf("info %p: ", page);
+	printf("%d x %db, %d free\n", page->chunks, page->size, page->chunks_free);
+}
+
+static void dump_pages()
+{
+	printf("First, dump chunk-pages:\n");
+	bool corrupt = false;
+	for (size_t i = 0; i < N_SIZES; i++)
+	{
+		pageinfo* page = g_chunk_pages[i];
+		if (page)
+		{
+			size_t size = ix_size(i);
+			printf("%p: %ld, size %ld: ", page->page, i, size);
+			print_pageinfo(page);
+		}
+	}
+	printf("Page dump:\n");
+	for (size_t i = 0; i < g_n_pages; i++)
+	{
+		pageinfo* page = g_pages[i];
+		void* addr = (uint8_t*)g_first_page + 4096*i;
+		if (page)
+		{
+			if (page->page != addr)
+			{
+				printf("!!! CLOBBERED !!! page is %p but info points to %p\n", addr, page->page);
+				corrupt = true;
+			}
+			printf("%p: ", addr);
+			print_pageinfo(page);
+		}
+		else
+		{
+			//printf("Not used (or pagedir info)\n");
+		}
+	}
+	assert(!corrupt);
+	printf(":pmud egaP\n");
 }
 
 static void set_pageinfo(void* page, pageinfo* info)
@@ -354,7 +400,11 @@ void free(void *ptr)
 	if (unlikely(!page)) panic("free on unknown pointer %p", ptr);
 
 	bool was_filled = page_filled(page);
+
+	IFDEBUG(dump_pages();)
 	page_free_chunk(page, ptr);
+	IFDEBUG(dump_pages();)
+
 	if (was_filled)
 	{
 		pageinfo** pagep = g_chunk_pages + page->index;
@@ -363,6 +413,8 @@ void free(void *ptr)
 			*pagep = page;
 		else
 			*pagep = pageinfo_from_heap(insert(&free_page->heap, &page->heap));
+
+		IFDEBUG(dump_pages();)
 	}
 	else if (unlikely(page->chunks_free == page->chunks))
 	{
@@ -380,7 +432,7 @@ static int32_t xrand()
 	return (m_z << 16) + m_w;  /* 32-bit result */
 }
 
-const size_t DELAY = 10;
+const size_t DELAY = 100;
 const size_t NTESTS = 100000;
 const size_t MAXALLOC = 512;
 
@@ -393,8 +445,10 @@ int main()
 		void** p = ptrs + (i % DELAY);
 		debug("free(%p)\n", *p);
 		free(*p);
+	IFDEBUG(dump_pages();)
 		debug("malloc(%lu)\n", (unsigned long)size);
 		*p = malloc(size);
+	IFDEBUG(dump_pages();)
 		debug("malloc(%lu): %p\n", (unsigned long)size, *p);
 		for (size_t j = 0; j < DELAY; j++)
 		{
