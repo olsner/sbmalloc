@@ -117,16 +117,17 @@ struct pageinfo
 	 */
 	void* page;
 
+	/**
+	 * The heap of address-sorted pages in this category that have free pages
+	 */
+	pairing_ptr_heap heap;
+
 	uint16_t size;
 	//uint16_t isize;
 	uint16_t chunks;
 	uint16_t chunks_free;
 	uint8_t index; // index into array of pages
 
-	/**
-	 * The heap of address-sorted pages in this category that have free pages
-	 */
-	pairing_ptr_heap heap;
 	/**
 	 * 1-32 bytes of bitmap data. A set bit means *free* chunk.
 	 */
