@@ -238,6 +238,14 @@ static size_t ix_size(size_t ix)
 	return ix < 8 ? 16 * (ix + 1) : (1 << ix);
 }
 
+static void* get_pages(size_t n)
+{
+	// Align. Might not be required? Depends on who calls sbrk first...
+	uintptr_t cur = (uintptr_t)sbrk(0);
+	sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
+	return sbrk(PAGE_SIZE * n);
+}
+
 static void* get_page()
 {
 	/*if (void* ret = g_free_pages)
@@ -382,7 +390,15 @@ void *malloc(size_t size)
 {
 	if (!size) return NULL;
 
-	assert(size < PAGE_SIZE / 2);
+	if (unlikely(size > PAGE_SIZE / 2))
+	{
+		size_t npages = (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
+		void* ret = get_pages(npages);
+		// Fill page table with magic numbers so we know how to free this later
+		// TODO register_pages(ret, npages);
+		assert(ret);
+		return ret;
+	}
 
 	pageinfo** pagep = g_chunk_pages + size_ix(size);
 	pageinfo* page = *pagep;
