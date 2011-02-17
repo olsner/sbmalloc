@@ -13,14 +13,18 @@
 
 static void panic(...) __attribute__((noreturn));
 
-#ifdef DEBUG
-#define debug printf
+#if defined DEBUG || defined TEST
 #define assert xassert
 #define xassert(e) if (e); else panic(#e)
+#else
+#define assert(...) (void)0
+#endif
+
+#ifdef DEBUG
+#define debug printf
 #define IFDEBUG(X) X
 #else
 #define debug(...) (void)0
-#define assert(...) (void)0
 #define IFDEBUG(X) /* nothing */
 #endif
 
