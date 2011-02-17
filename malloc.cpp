@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
