@@ -11,7 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-static void panic(...) __attribute__((noreturn));
+static void panic(const char* fmt, ...) __attribute__((noreturn));
 
 #if defined DEBUG || defined TEST
 #define assert xassert
@@ -191,8 +191,15 @@ static uintptr_t g_n_pages;
 // Assumes mostly contiguous pages...
 static pageinfo** g_pages;
 
-static void panic(...)
+static void panic(const char* fmt, ...)
 {
+	fflush(stdout);
+	fflush(stderr);
+	va_list ap;
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	fprintf(stderr, "\n");
+	va_end(ap);
 	abort();
 }
 
