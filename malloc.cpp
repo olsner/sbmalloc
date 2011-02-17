@@ -16,8 +16,19 @@ void fini() __attribute__((destructor));
 
 static void panic(...) __attribute__((noreturn));
 
+#ifdef DEBUG
+#define debug printf
 #define assert xassert
 #define xassert(e) if (e); else panic(#e)
+#define IFDEBUG(X) X
+#else
+#define debug(...) (void)0
+#define assert(...) (void)0
+#define IFDEBUG(X) /* nothing */
+#endif
+
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
 /**
  * These are adapted to be stored internally in whatever data we have.
@@ -304,17 +315,17 @@ void *malloc(size_t size)
 
 	pageinfo** pagep = g_chunk_pages + size_ix(size);
 	pageinfo* page = *pagep;
-	if (!page)
+	if (unlikely(!page))
 	{
-		printf("Adding new chunk page for size %u (cat %d)\n", size, size_ix(size));
+		debug("Adding new chunk page for size %lu (cat %ld)\n", size, size_ix(size));
 		page = new_chunkpage(size);
 		*pagep = page;
 	}
-	printf("Allocating chunk from %p (info %p, %d left)\n", page->page, page, page->chunks_free);
+	debug("Allocating chunk from %p (info %p, %d left)\n", page->page, page, page->chunks_free);
 	void* ret = page_get_chunk(page);
-	if (page_filled(page))
+	if (unlikely(page_filled(page)))
 	{
-		printf("Page %p (info %p) filled\n", page->page, page);
+		debug("Page %p (info %p) filled\n", page->page, page);
 		pairing_ptr_heap* newpage = delete_min(&page->heap);
 		*pagep = newpage ? pageinfo_from_heap(newpage) : NULL;
 	}
@@ -325,7 +336,7 @@ void* calloc(size_t n, size_t sz)
 {
 	size_t size = n * sz;
 	void* ptr = malloc(size);
-	if (ptr) memset(ptr, 0, size);
+	if (likely(ptr)) memset(ptr, 0, size);
 	return ptr;
 }
 
@@ -333,19 +344,19 @@ void* realloc(void* ptr, size_t new_size)
 {
 	size_t old_size = get_alloc_size(ptr);
 	void* ret = malloc(new_size);
-	if (ret)
+	if (likely(ret))
 	{
-		memcpy(ret, ptr, new_size < old_size ? new_size : old_size);
+		memcpy(ret, ptr, unlikely(new_size < old_size) ? new_size : old_size);
 	}
 	return ret;
 }
 
 void free(void *ptr)
 {
-	if (!ptr) return;
+	if (unlikely(!ptr)) return;
 
 	pageinfo* page = ptr_pageinfo(ptr);
-	if (!page) panic("free on unknown pointer %p", ptr);
+	if (unlikely(!page)) panic("free on unknown pointer %p", ptr);
 
 	bool was_filled = page_filled(page);
 	page_free_chunk(page, ptr);
@@ -358,9 +369,9 @@ void free(void *ptr)
 		else
 			*pagep = pageinfo_from_heap(insert(&free_page->heap, &page->heap));
 	}
-	else if (page->chunks_free == page->chunks)
+	else if (unlikely(page->chunks_free == page->chunks))
 	{
-		printf("Free: page %p (info %p) is now free\n", page->page, page);
+		debug("Free: page %p (info %p) is now free\n", page->page, page);
 	}
 }
 
@@ -385,11 +396,11 @@ int main()
 	{
 		size_t size = i % MAXALLOC;
 		void** p = ptrs + (i % DELAY);
-		printf("free(%p)\n", *p);
+		debug("free(%p)\n", *p);
 		free(*p);
-		printf("malloc(%lu)\n", (unsigned long)size);
+		debug("malloc(%lu)\n", (unsigned long)size);
 		*p = malloc(size);
-		printf("malloc(%lu): %p\n", (unsigned long)size, *p);
+		debug("malloc(%lu): %p\n", (unsigned long)size, *p);
 		for (size_t j = 0; j < DELAY; j++)
 		{
 			assert(ptrs + j == p || !p[0] || ptrs[j] != p[0]);
