@@ -5,7 +5,9 @@ CXXFLAGS = \
 	-fno-rtti -fno-exceptions -fomit-frame-pointer \
 	-Wall
 FASTCXXFLAGS = $(CXXFLAGS) -O2 -march=native
-DEBUGCXXFLAGS = $(CXXFLAGS) -g -DDEBUG
+DEBUGCXXFLAGS = $(CXXFLAGS) \
+	-g -DDEBUG \
+	-ftrapv -funwind-tables
 LDFLAGS = -lrt -ldl
 LDSOFLAGS = $(LDFLAGS) -Wl,-no-undefined
 GHCFLAGS = -O2 -fvia-c
