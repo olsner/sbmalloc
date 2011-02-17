@@ -169,9 +169,13 @@ static void* page_get_chunk(pageinfo* page)
 }
 static void page_free_chunk(pageinfo* page, void* ptr)
 {
-	size_t ix = (uint8_t*)ptr - (uint8_t*)page->page;
+	size_t offset_in_page = (uint8_t*)ptr - (uint8_t*)page->page;
+	size_t ix = offset_in_page;
 	ix /= page->size; // FIXME store inverse or something instead
-	page->bitmap[ix >> 3] |= 1 << (7 - (ix & 7));
+	uint8_t mask = 1 << (7 - (ix & 7));
+	size_t byte = ix >> 3;
+	debug("Freeing %p in %p (size %d): oring byte %d with %#x\n", ptr, page->page, page->size, byte, mask);
+	page->bitmap[byte] |= mask;
 	page->chunks_free++;
 }
 
