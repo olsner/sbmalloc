@@ -269,6 +269,11 @@ static void print_pageinfo(pageinfo* page)
 	printf("%d x %db, %d free\n", page->chunks, page->size, page->chunks_free);
 }
 
+size_t page_allocated_space(pageinfo* page)
+{
+	return (page->chunks - page->chunks_free) * page->size;
+}
+
 static void dump_pages()
 {
 	printf("First, dump chunk-pages:\n");
@@ -284,6 +289,8 @@ static void dump_pages()
 		}
 	}
 	printf("Page dump:\n");
+	size_t used = 0;
+	size_t allocated = 0;
 	for (size_t i = 0; i < g_n_pages; i++)
 	{
 		pageinfo* page = g_pages[i];
@@ -297,6 +304,9 @@ static void dump_pages()
 			}
 			printf("%p: ", addr);
 			print_pageinfo(page);
+
+			allocated += PAGE_SIZE;
+			used += page_allocated_space(page);
 		}
 		else
 		{
@@ -305,6 +315,7 @@ static void dump_pages()
 	}
 	assert(!corrupt);
 	printf(":pmud egaP\n");
+	printf("Used %lu of %lu (%.02f%%)\n", used, allocated, allocated ? (100 * used / float(allocated)) : 0);
 }
 
 static void set_pageinfo(void* page, pageinfo* info)
