@@ -15,6 +15,10 @@
 static void panic(const char* fmt, ...) __attribute__((noreturn));
 #define xassert(e) if (unlikely(e)); else panic("Assertion failed! " #e)
 
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
 
 #if defined DEBUG || defined TEST
 #define assert xassert
@@ -125,16 +129,16 @@ struct pageinfo
 	 */
 	pairing_ptr_heap heap;
 
-	uint16_t size;
-	//uint16_t isize;
-	uint16_t chunks;
-	uint16_t chunks_free;
-	uint8_t index; // index into array of pages
+	u16 size;
+	//u16 isize;
+	u16 chunks;
+	u16 chunks_free;
+	u8 index; // index into array of pages
 
 	/**
 	 * 1-32 bytes of bitmap data. A set bit means *free* chunk.
 	 */
-	uint8_t bitmap[];
+	u8 bitmap[];
 
 	// TODO merge bitmap into page?
 };
@@ -151,10 +155,10 @@ static void* page_get_chunk(pageinfo* page)
 	uint8_t* bitmap = page->bitmap;
 	for (size_t i = 0; i < page->chunks / 8; i++)
 	{
-		const uint8_t found = bitmap[i];
+		const u8 found = bitmap[i];
 		if (found)
 		{
-			uint8_t mask = 0x80;
+			u8 mask = 0x80;
 			size_t n = i << 3;
 			while (mask)
 			{
@@ -172,7 +176,7 @@ static void* page_get_chunk(pageinfo* page)
 }
 static void page_free_chunk(pageinfo* page, void* ptr)
 {
-	size_t offset_in_page = (uint8_t*)ptr - (uint8_t*)page->page;
+	size_t offset_in_page = (u8*)ptr - (u8*)page->page;
 	size_t ix = offset_in_page;
 	ix /= page->size; // FIXME store inverse or something instead
 	uint8_t mask = 1 << (7 - (ix & 7));
@@ -262,7 +266,7 @@ static void dump_pages()
 	for (size_t i = 0; i < g_n_pages; i++)
 	{
 		pageinfo* page = g_pages[i];
-		void* addr = (uint8_t*)g_first_page + 4096*i;
+		void* addr = (u8*)g_first_page + 4096*i;
 		if (page)
 		{
 			if (page->page != addr)
