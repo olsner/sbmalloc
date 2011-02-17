@@ -180,7 +180,7 @@ static void page_free_chunk(pageinfo* page, void* ptr)
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 
-static pairing_ptr_heap* g_free_pages;
+//static pairing_ptr_heap* g_free_pages;
 static pageinfo* g_chunk_pages[N_SIZES];
 static uintptr_t g_first_page;
 static uintptr_t g_n_pages;
@@ -210,12 +210,12 @@ static size_t ix_size(size_t ix)
 
 static void* get_page()
 {
-	if (void* ret = g_free_pages)
+	/*if (void* ret = g_free_pages)
 	{
 		g_free_pages = delete_min(g_free_pages);
 		return ret;
 	}
-	else
+	else*/
 	{
 		uintptr_t cur = (uintptr_t)sbrk(0);
 		sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
