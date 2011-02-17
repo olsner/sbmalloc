@@ -99,12 +99,12 @@ struct pairing_ptr_heap
 		return l;
 	}
 };
-pairing_ptr_heap* delete_min(pairing_ptr_heap* p)
+static pairing_ptr_heap* delete_min(pairing_ptr_heap* p)
 {
 	assert(p);
 	return p->delete_min();
 }
-pairing_ptr_heap* insert(pairing_ptr_heap* l, pairing_ptr_heap* r)
+static pairing_ptr_heap* insert(pairing_ptr_heap* l, pairing_ptr_heap* r)
 {
 	return pairing_ptr_heap::merge(l, r);
 }
@@ -137,11 +137,11 @@ struct pageinfo
 #define pageinfo_from_heap(heap_) \
 	((pageinfo*)((char*)(heap_) - offsetof(pageinfo, heap)))
 
-bool page_filled(pageinfo* page)
+static bool page_filled(pageinfo* page)
 {
 	return !page->chunks_free;
 }
-void* page_get_chunk(pageinfo* page)
+static void* page_get_chunk(pageinfo* page)
 {
 	page->chunks_free--;
 	uint8_t* bitmap = page->bitmap;
@@ -166,7 +166,7 @@ void* page_get_chunk(pageinfo* page)
 	}
 	panic("No free chunks found?");
 }
-void page_free_chunk(pageinfo* page, void* ptr)
+static void page_free_chunk(pageinfo* page, void* ptr)
 {
 	size_t ix = (uint8_t*)ptr - (uint8_t*)page->page;
 	ix /= page->size; // FIXME store inverse or something instead
@@ -195,12 +195,12 @@ void fini()
 	// TODO Unmap everything?
 }
 
-void panic(...)
+static void panic(...)
 {
 	abort();
 }
 
-size_t size_ix(size_t size)
+static size_t size_ix(size_t size)
 {
 	if (size <= 128)
 		return (size + 15) / 16 - 1;
@@ -211,12 +211,12 @@ size_t size_ix(size_t size)
 	return ix;
 }
 
-size_t ix_size(size_t ix)
+static size_t ix_size(size_t ix)
 {
 	return ix < 8 ? 16 * (ix + 1) : (1 << ix);
 }
 
-void* get_page()
+static void* get_page()
 {
 	if (void* ret = g_free_pages)
 	{
@@ -231,7 +231,7 @@ void* get_page()
 	}
 }
 
-void set_pageinfo(void* page, pageinfo* info)
+static void set_pageinfo(void* page, pageinfo* info)
 {
 	uintptr_t offset;
 	if (g_pages)
@@ -260,7 +260,7 @@ void set_pageinfo(void* page, pageinfo* info)
 	g_pages[offset] = info;
 }
 
-pageinfo* new_chunkpage(size_t size)
+static pageinfo* new_chunkpage(size_t size)
 {
 	size_t ix = size_ix(size);
 	size = ix_size(ix);
@@ -293,7 +293,7 @@ pageinfo* new_chunkpage(size_t size)
 	return ret;
 }
 
-pageinfo* ptr_pageinfo(void* ptr)
+static pageinfo* ptr_pageinfo(void* ptr)
 {
 	uintptr_t offset = ((uintptr_t)ptr - g_first_page) >> PAGE_SHIFT;
 	if (offset > g_n_pages) return NULL;
@@ -302,7 +302,7 @@ pageinfo* ptr_pageinfo(void* ptr)
 	return ret;
 }
 
-size_t get_alloc_size(void* ptr)
+static size_t get_alloc_size(void* ptr)
 {
 	pageinfo* info = ptr_pageinfo(ptr);
 	if (!info) panic("get_alloc_size for unknown pointer %p", ptr);
@@ -377,7 +377,7 @@ void free(void *ptr)
 
 #ifdef TEST
 
-int32_t xrand()
+static int32_t xrand()
 {
 	static int32_t m_w = 1246987127, m_z = 789456123;
 	m_z = 36969 * (m_z & 65535) + (m_z >> 16);
