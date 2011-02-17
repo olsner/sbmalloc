@@ -399,7 +399,14 @@ static size_t get_alloc_size(void* ptr)
 
 void *malloc(size_t size)
 {
-	if (!size) return NULL;
+	if (!size)
+	{
+#ifdef ZERO_ALLOC_RETURNS_NULL
+		return NULL;
+#else
+		size++;
+#endif
+	}
 
 	if (unlikely(size > PAGE_SIZE / 2))
 	{
