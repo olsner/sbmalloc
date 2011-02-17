@@ -11,9 +11,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-void init() __attribute__((constructor));
-void fini() __attribute__((destructor));
-
 static void panic(...) __attribute__((noreturn));
 
 #ifdef DEBUG
@@ -189,16 +186,6 @@ static uintptr_t g_first_page;
 static uintptr_t g_n_pages;
 // Assumes mostly contiguous pages...
 static pageinfo** g_pages;
-
-void init()
-{
-	g_first_page = (uintptr_t)sbrk(0);
-}
-
-void fini()
-{
-	// TODO Unmap everything?
-}
 
 static void panic(...)
 {
