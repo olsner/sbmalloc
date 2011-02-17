@@ -431,6 +431,7 @@ void *malloc(size_t size)
 	debug("Allocating %d from %p (info %p, %d left)\n", size, page->page, page, page->chunks_free);
 	void* ret = page_get_chunk(page);
 	debug("Allocated %p (%d bytes)\n", ret, page->size);
+	debug("X ALLOC %p\n", ret);
 	if (unlikely(page_filled(page)))
 	{
 		debug("Page %p (info %p) filled\n", page->page, page);
@@ -470,6 +471,8 @@ static bool check_page_alignment(pageinfo* page, void* ptr)
 void free(void *ptr)
 {
 	if (unlikely(!ptr)) return;
+
+	debug("X FREE %p\n", ptr);
 
 	pageinfo* page = ptr_pageinfo(ptr);
 	if (unlikely(!page)) panic("free on unknown pointer %p", ptr);
