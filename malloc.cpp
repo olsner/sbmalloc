@@ -559,6 +559,11 @@ static void free_magic_page(pageinfo* magic, void* ptr)
 	debug("Free: Page %p (%ld pages)\n", ptr, npages);
 	while (npages--)
 	{
+		IFDEBUG(
+		void* page = (u8*)ptr + npages * PAGE_SIZE;
+		pageinfo* info = get_pageinfo(page);
+		assert(IS_MAGIC_PAGE(info) && (info == MAGIC_PAGE_FIRST || info == MAGIC_PAGE_FOLLO));
+		)
 		free_page((u8*)ptr + npages * PAGE_SIZE);
 	}
 }
