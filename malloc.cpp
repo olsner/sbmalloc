@@ -378,9 +378,11 @@ static void set_pageinfo(void* page, pageinfo* info)
 		offset = 0;
 	}
 
+	//debug("set_pageinfo: Page %p info %p\n", page, info);
+
 	if (offset >= g_n_pages)
 	{
-		size_t required = (offset + PAGE_SIZE) & ~(PAGE_SIZE-1);
+		size_t required = (sizeof(pageinfo*) * offset + PAGE_SIZE) & ~(PAGE_SIZE-1);
 		pageinfo** new_pages = (pageinfo**)mmap(NULL, required, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 		assert(new_pages != MAP_FAILED);
 
