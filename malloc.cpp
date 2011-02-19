@@ -238,6 +238,7 @@ static size_t size_ix(size_t size)
 	if (size <= 128)
 		return (size + 15) / 16 - 1;
 
+	size--;
 	size_t ix = 8; // 256 bytes
 	size >>= 8;
 	while (size) { size >>= 1; ix++; }
