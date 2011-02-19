@@ -29,7 +29,7 @@ typedef uint64_t u64;
 
 #ifdef DEBUG
 #define debug printf
-#define IFDEBUG(X) X
+#define IFDEBUG(X) /*X*/
 #else
 #define debug(...) (void)0
 #define IFDEBUG(X) /* nothing */
