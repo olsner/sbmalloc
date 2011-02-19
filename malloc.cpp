@@ -592,13 +592,12 @@ int main()
 		assert(ix < N_SIZES);
 		assert(i <= ix_size(ix));
 	}
-	// NOTE: powers of two are off-by-one and get a too large index...
-	/*for (size_t i = 4; i < PAGE_SHIFT-1; i++)
+	for (size_t i = 4; i < PAGE_SHIFT-1; i++)
 	{
 		size_t ix = size_ix(1 << i);
 		assert(ix < N_SIZES);
 		assert((1 << i) == ix_size(ix));
-	}*/
+	}
 
 	void* ptrs[DELAY] = {0};
 	for (size_t i = 0; i < NTESTS; i++)
