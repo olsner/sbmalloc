@@ -204,12 +204,21 @@ static void page_free_chunk(pageinfo* page, void* ptr)
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 
-//static pairing_ptr_heap* g_free_pages;
+static pairing_ptr_heap* g_free_pages;
+static size_t g_n_free_pages;
 static pageinfo* g_chunk_pages[N_SIZES];
 static uintptr_t g_first_page;
 static uintptr_t g_n_pages;
 // Assumes mostly contiguous pages...
 static pageinfo** g_pages;
+
+static void set_pageinfo(void* page, pageinfo* info);
+
+#define MAGIC_PAGE_OTHER ((pageinfo*)0)
+#define MAGIC_PAGE_FIRST ((pageinfo*)1)
+#define MAGIC_PAGE_FOLLO ((pageinfo*)2)
+#define LAST_MAGIC_PAGE 3
+#define IS_MAGIC_PAGE(page) ((((uintptr_t)page) & 0x0f) && ((((uintptr_t)page) & 0xff) < LAST_MAGIC_PAGE))
 
 static void panic(const char* fmt, ...)
 {
@@ -240,22 +249,15 @@ static size_t ix_size(size_t ix)
 	return ix < 8 ? 16 * (ix + 1) : (1 << ix);
 }
 
-static void* get_pages(size_t n)
-{
-	// Align. Might not be required? Depends on who calls sbrk first...
-	uintptr_t cur = (uintptr_t)sbrk(0);
-	sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
-	return sbrk(PAGE_SIZE * n);
-}
-
 static void* get_page()
 {
-	/*if (void* ret = g_free_pages)
+	if (void* ret = g_free_pages)
 	{
 		g_free_pages = delete_min(g_free_pages);
+		g_n_free_pages--;
 		return ret;
 	}
-	else*/
+	else
 	{
 		uintptr_t cur = (uintptr_t)sbrk(0);
 		sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
@@ -263,6 +265,29 @@ static void* get_page()
 		debug("get_page: %p\n", ret);
 		return ret;
 	}
+}
+
+static void free_page(void* page)
+{
+	memset(page, 0, sizeof(pairing_ptr_heap));
+	g_free_pages = insert(g_free_pages, (pairing_ptr_heap*)page);
+	g_n_free_pages++;
+	set_pageinfo(page, NULL);
+}
+
+/**
+ * Get *contiguous* pages.
+ */
+static void* get_pages(size_t n)
+{
+	if (n == 1) return get_page();
+
+	// Align. Might not be required? Depends on who calls sbrk first...
+	uintptr_t cur = (uintptr_t)sbrk(0);
+	sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
+	void* ret = sbrk(PAGE_SIZE * n);
+	debug("get_pages: %ld pages: %p\n", n, ret);
+	return ret;
 }
 
 static void print_pageinfo(pageinfo* page)
@@ -388,15 +413,40 @@ static pageinfo* ptr_pageinfo(void* ptr)
 	uintptr_t offset = ((uintptr_t)ptr - g_first_page) >> PAGE_SHIFT;
 	if (offset > g_n_pages) return NULL;
 	pageinfo* ret = g_pages[offset];
-	assert(!ret || !(((uintptr_t)ret->page ^ (uintptr_t)ptr) >> PAGE_SHIFT));
+	assert(!ret || IS_MAGIC_PAGE(ret) || !(((uintptr_t)ret->page ^ (uintptr_t)ptr) >> PAGE_SHIFT));
 	return ret;
+}
+
+static size_t get_magic_page_size(pageinfo* info, void* ptr)
+{
+	assert(info == MAGIC_PAGE_FIRST);
+	uintptr_t n = ((uintptr_t)ptr - g_first_page) >> PAGE_SHIFT;
+	pageinfo** start = g_pages + n;
+	pageinfo** p = g_pages + n + 1;
+	pageinfo** end = g_pages + g_n_pages;
+	while (p < end && *p == MAGIC_PAGE_FOLLO)
+	{
+		p++;
+	}
+	return p - start;
 }
 
 static size_t get_alloc_size(void* ptr)
 {
 	pageinfo* info = ptr_pageinfo(ptr);
-	if (!info) panic("get_alloc_size for unknown pointer %p", ptr);
+	if (unlikely(IS_MAGIC_PAGE(info)))
+	{
+		return get_magic_page_size(info, ptr);
+	}
+	if (unlikely(!info)) panic("get_alloc_size for unknown pointer %p", ptr);
 	return info->size;
+}
+
+static void register_magic_pages(void* ptr_, size_t count)
+{
+	u8* ptr = (u8*)ptr_;
+	set_pageinfo(ptr, MAGIC_PAGE_FIRST);
+	while (--count) set_pageinfo(ptr += PAGE_SIZE, MAGIC_PAGE_FOLLO);
 }
 
 void *malloc(size_t size)
@@ -414,9 +464,10 @@ void *malloc(size_t size)
 	{
 		size_t npages = (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
 		void* ret = get_pages(npages);
-		// Fill page table with magic numbers so we know how to free this later
-		// TODO register_pages(ret, npages);
-		assert(ret);
+		if (ret)
+		{
+			register_magic_pages(ret, npages);
+		}
 		return ret;
 	}
 
@@ -468,6 +519,18 @@ static bool check_page_alignment(pageinfo* page, void* ptr)
 	return !(pos % page->size);
 }
 
+static void free_magic_page(pageinfo* magic, void* ptr)
+{
+	debug("Free magic page %p (magic %ld)\n", ptr, (uintptr_t)magic);
+	assert(magic == MAGIC_PAGE_FIRST);
+	size_t npages = get_magic_page_size(magic, ptr);
+	debug("Free: Page %p (%ld pages)\n", ptr, npages);
+	while (npages--)
+	{
+		free_page((u8*)ptr + npages * PAGE_SIZE);
+	}
+}
+
 void free(void *ptr)
 {
 	if (unlikely(!ptr)) return;
@@ -475,6 +538,11 @@ void free(void *ptr)
 	debug("X FREE %p\n", ptr);
 
 	pageinfo* page = ptr_pageinfo(ptr);
+	if (unlikely(IS_MAGIC_PAGE(page)))
+	{
+		free_magic_page(page, ptr);
+		return;
+	}
 	if (unlikely(!page)) panic("free on unknown pointer %p", ptr);
 	assert(check_page_alignment(page, ptr));
 
