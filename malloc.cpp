@@ -364,6 +364,7 @@ static void dump_pages()
 	assert(!corrupt);
 	printf(":pmud egaP\n");
 	printf("Used %lu of %lu (%.02f%%)\n", used, allocated, allocated ? (100 * used / float(allocated)) : 0);
+	fflush(stdout);
 }
 
 static void set_pageinfo(void* page, pageinfo* info)
@@ -486,11 +487,13 @@ void *malloc(size_t size)
 	if (unlikely(size > PAGE_SIZE / 2))
 	{
 		size_t npages = (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
+		debug("Allocating %ld from %ld fresh pages\n", size, npages);
 		void* ret = get_pages(npages);
 		if (ret)
 		{
 			register_magic_pages(ret, npages);
 		}
+		debug("X ALLOC %p\n", ret);
 		return ret;
 	}
 
@@ -603,6 +606,9 @@ void free(void *ptr)
 	else if (unlikely(page->chunks_free == page->chunks))
 	{
 		debug("Free: page %p (info %p) is now free\n", page->page, page);
+		// TODO Logic for page reuse.
+		// For now: keep it in the free-heap for the chunksize regardless.
+		// We can't easily extradict it from the pairing heap :)
 	}
 }
 
