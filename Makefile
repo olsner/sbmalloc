@@ -14,17 +14,20 @@ GHCFLAGS = -O2 -fvia-c
 
 all: malloc.so malloc_debug.so test debugtest
 
+HUSH_CXX = @echo " [CXX]\t$@";
+HUSH_CXX_DEBUG = @echo " [CXX]\t$@ [DEBUG]";
+
 malloc.so: malloc.cpp
-	$(CXX) $(FASTCXXFLAGS) -shared -o $@ $< $(LDSOFLAGS)
+	$(HUSH_CXX) $(CXX) $(FASTCXXFLAGS) -shared -o $@ $< $(LDSOFLAGS)
 
 malloc_debug.so: malloc.cpp
-	$(CXX) $(DEBUGCXXFLAGS) -shared -o $@ $< $(LDSOFLAGS)
+	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -shared -o $@ $< $(LDSOFLAGS)
 
 test: malloc.cpp
-	$(CXX) $(FASTCXXFLAGS) -o $@ $< $(LDFLAGS) -DTEST
+	$(HUSH_CXX) $(CXX) $(FASTCXXFLAGS) -o $@ $< $(LDFLAGS) -DTEST
 
 debugtest: malloc.cpp
-	$(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS) -DTEST
+	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS) -DTEST
 
 clean:
 	rm -f malloc.so malloc_debug.so test debugtest
