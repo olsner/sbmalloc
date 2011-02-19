@@ -222,12 +222,12 @@ static void set_pageinfo(void* page, pageinfo* info);
 
 static void panic(const char* fmt, ...)
 {
-	dump_pages();
 	va_list ap;
 	va_start(ap, fmt);
 	vfprintf(stderr, fmt, ap);
 	fprintf(stderr, "\n");
 	va_end(ap);
+	dump_pages();
 	fflush(stdout);
 	fflush(stderr);
 	abort();
