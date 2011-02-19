@@ -214,6 +214,7 @@ static uintptr_t g_n_pages;
 static pageinfo** g_pages;
 
 static void set_pageinfo(void* page, pageinfo* info);
+static pageinfo* get_pageinfo(void* ptr);
 
 #define MAGIC_PAGE_OTHER ((pageinfo*)0)
 #define MAGIC_PAGE_FIRST ((pageinfo*)1)
@@ -430,7 +431,7 @@ static pageinfo* new_chunkpage(size_t size)
 	return ret;
 }
 
-static pageinfo* ptr_pageinfo(void* ptr)
+static pageinfo* get_pageinfo(void* ptr)
 {
 	uintptr_t offset = ((uintptr_t)ptr - g_first_page) >> PAGE_SHIFT;
 	if (offset > g_n_pages) return NULL;
@@ -455,7 +456,7 @@ static size_t get_magic_page_size(pageinfo* info, void* ptr)
 
 static size_t get_alloc_size(void* ptr)
 {
-	pageinfo* info = ptr_pageinfo(ptr);
+	pageinfo* info = get_pageinfo(ptr);
 	if (unlikely(IS_MAGIC_PAGE(info)))
 	{
 		return get_magic_page_size(info, ptr);
@@ -568,7 +569,7 @@ void free(void *ptr)
 
 	debug("X FREE %p\n", ptr);
 
-	pageinfo* page = ptr_pageinfo(ptr);
+	pageinfo* page = get_pageinfo(ptr);
 	if (unlikely(IS_MAGIC_PAGE(page)))
 	{
 		free_magic_page(page, ptr);
