@@ -12,6 +12,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <pthread.h>
+
 //static void xprintf(const char* fmt, ...);
 static void panic(const char* fmt, ...) __attribute__((noreturn));
 static void dump_pages();
@@ -212,6 +214,9 @@ static uintptr_t g_first_page;
 static uintptr_t g_n_pages;
 // Assumes mostly contiguous pages...
 static pageinfo** g_pages;
+
+static pthread_t get_owner();
+#define thread_check() xassert(pthread_equal(get_owner(), pthread_self()))
 
 static void set_pageinfo(void* page, pageinfo* info);
 static pageinfo* get_pageinfo(void* ptr);
@@ -475,6 +480,8 @@ static void register_magic_pages(void* ptr_, size_t count)
 
 void *malloc(size_t size)
 {
+	thread_check();
+
 	if (!size)
 	{
 #ifdef ZERO_ALLOC_RETURNS_NULL
@@ -521,6 +528,8 @@ void *malloc(size_t size)
 
 void* calloc(size_t n, size_t sz)
 {
+	thread_check();
+
 	size_t size = n * sz;
 	void* ptr = malloc(size);
 	if (likely(ptr)) memset(ptr, 0, size);
@@ -529,6 +538,8 @@ void* calloc(size_t n, size_t sz)
 
 void* realloc(void* ptr, size_t new_size)
 {
+	thread_check();
+
 	if (unlikely(!new_size))
 	{
 		free(ptr);
@@ -573,6 +584,8 @@ static void free_magic_page(pageinfo* magic, void* ptr)
 
 void free(void *ptr)
 {
+	thread_check();
+
 	if (unlikely(!ptr)) return;
 
 	debug("X FREE %p\n", ptr);
@@ -666,6 +679,14 @@ static void selftest()
 			free(ptrs[i]);
 		}
 	}
+}
+
+pthread_t get_owner()
+{
+	static pthread_t g_owner = 0;
+	if (!g_owner)
+		g_owner = pthread_self();
+	return g_owner;
 }
 
 void init() __attribute__((constructor));
