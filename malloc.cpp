@@ -570,8 +570,6 @@ void free(void *ptr)
 	}
 }
 
-#ifdef TEST
-
 static int32_t xrand()
 {
 	static int32_t m_w = 1246987127, m_z = 789456123;
@@ -580,42 +578,66 @@ static int32_t xrand()
 	return (m_z << 16) + m_w;  /* 32-bit result */
 }
 
-const size_t DELAY = 100;
-const size_t NTESTS = 100000;
-const size_t MAXALLOC = 4097;
-
-int main()
+static void selftest()
 {
+	const size_t DELAY = 1000;
+	const size_t NTESTS = 1000000;
+	const size_t MAXALLOC = 4097;
+
+	size_t iters = 1;
+	if (const char *iterenv = getenv("TEST_ITERATIONS"))
+		iters = atoi(iterenv);
+
 	for (size_t i = 1; i < PAGE_SIZE / 2; i++)
 	{
 		size_t ix = size_ix(i);
-		assert(ix < N_SIZES);
-		assert(i <= ix_size(ix));
+		xassert(ix < N_SIZES);
+		xassert(i <= ix_size(ix));
 	}
 	for (size_t i = 4; i < PAGE_SHIFT-1; i++)
 	{
 		size_t ix = size_ix(1 << i);
-		assert(ix < N_SIZES);
-		assert((1 << i) == ix_size(ix));
+		xassert(ix < N_SIZES);
+		xassert((1u << i) == ix_size(ix));
 	}
 
-	void* ptrs[DELAY] = {0};
-	for (size_t i = 0; i < NTESTS; i++)
+	while (iters--)
 	{
-		size_t size = i % MAXALLOC;
-		void** p = ptrs + (i % DELAY);
-		debug("free(%p)\n", *p);
-		free(*p);
-	IFDEBUG(dump_pages();)
-		debug("malloc(%lu)\n", (unsigned long)size);
-		*p = malloc(size);
-	IFDEBUG(dump_pages();)
-		debug("malloc(%lu): %p\n", (unsigned long)size, *p);
-		for (size_t j = 0; j < DELAY; j++)
+		void* ptrs[DELAY] = {0};
+		for (size_t i = 0; i < DELAY; i++)
 		{
-			assert(ptrs + j == p || !p[0] || ptrs[j] != p[0]);
+			ptrs[i] = malloc(xrand() % MAXALLOC);
+		}
+		for (size_t i = 0; i < NTESTS; i++)
+		{
+			size_t size = xrand() % MAXALLOC;
+			size_t ifree = (xrand() % DELAY);
+			size_t imalloc = (xrand() % DELAY);
+			free(ptrs[ifree]);
+			ptrs[ifree] = ptrs[imalloc];
+			IFDEBUG(dump_pages());
+			ptrs[imalloc] = malloc(size);
+			IFDEBUG(dump_pages());
+		}
+		for (size_t i = 0; i < DELAY; i++)
+		{
+			free(ptrs[i]);
 		}
 	}
+}
+
+void init() __attribute__((constructor));
+void init()
+{
+	selftest();
+}
+
+#ifdef TEST
+int main()
+{
+	selftest();
+	printf("\"OK, dumping left-over state:\"!\n");
+	dump_pages();
 	printf("\"OK\"!\n");
 }
 #endif
