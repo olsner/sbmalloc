@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+//static void xprintf(const char* fmt, ...);
 static void panic(const char* fmt, ...) __attribute__((noreturn));
 static void dump_pages();
 #define xassert(e) if (unlikely(e)); else panic("Assertion failed! " #e)
@@ -21,7 +22,7 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-#if defined DEBUG || defined TEST
+#if defined DEBUG
 #define assert xassert
 #else
 #define assert(...) (void)0
@@ -219,6 +220,13 @@ static void set_pageinfo(void* page, pageinfo* info);
 #define MAGIC_PAGE_FOLLO ((pageinfo*)2)
 #define LAST_MAGIC_PAGE 3
 #define IS_MAGIC_PAGE(page) ((((uintptr_t)page) & 0x0f) && ((((uintptr_t)page) & 0xff) < LAST_MAGIC_PAGE))
+
+#if 0
+static void xprintf(const char* fmt, ...)
+{
+	// TODO Make an xprintf that never allocates!
+}
+#endif
 
 static void panic(const char* fmt, ...)
 {
@@ -480,7 +488,7 @@ void *malloc(size_t size)
 		page = new_chunkpage(size);
 		*pagep = page;
 	}
-	debug("Allocating %d from %p (info %p, %d left)\n", size, page->page, page, page->chunks_free);
+	debug("Allocating %ld from %p (info %p, %d left)\n", size, page->page, page, page->chunks_free);
 	void* ret = page_get_chunk(page);
 	debug("Allocated %p (%d bytes)\n", ret, page->size);
 	debug("X ALLOC %p\n", ret);
@@ -514,11 +522,13 @@ void* realloc(void* ptr, size_t new_size)
 	return ret;
 }
 
+#ifdef DEBUG
 static bool check_page_alignment(pageinfo* page, void* ptr)
 {
 	ptrdiff_t pos = (u8*)ptr - (u8*)page->page;
 	return !(pos % page->size);
 }
+#endif
 
 static void free_magic_page(pageinfo* magic, void* ptr)
 {
