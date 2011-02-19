@@ -327,11 +327,21 @@ static void dump_pages()
 	printf("Page dump:\n");
 	size_t used = 0;
 	size_t allocated = 0;
-	for (size_t i = 0; i < g_n_pages; i++)
+	pageinfo** pagep = g_pages;
+	pageinfo** end = pagep + g_n_pages;
+	u8* addr = (u8*)g_first_page;
+	while (pagep < end)
 	{
-		pageinfo* page = g_pages[i];
-		void* addr = (u8*)g_first_page + 4096*i;
-		if (page)
+		pageinfo* page = *pagep++;
+		if (unlikely(IS_MAGIC_PAGE(page)))
+		{
+			xassert(page == MAGIC_PAGE_FIRST);
+			pageinfo** first = pagep;
+			while (*pagep == MAGIC_PAGE_FOLLO)
+				pagep++;
+			printf("%p: %ld page(s)\n", addr, 1 + pagep - first);
+		}
+		else if (likely(page))
 		{
 			if (page->page != addr)
 			{
@@ -348,6 +358,7 @@ static void dump_pages()
 		{
 			//printf("Not used (or pagedir info)\n");
 		}
+		addr += 4096;
 	}
 	assert(!corrupt);
 	printf(":pmud egaP\n");
