@@ -525,7 +525,14 @@ void* calloc(size_t n, size_t sz)
 
 void* realloc(void* ptr, size_t new_size)
 {
+	if (unlikely(!new_size))
+	{
+		free(ptr);
+		return NULL;
+	}
+
 	void* ret = malloc(new_size);
+	assert(ret);
 	if (likely(ret && ptr))
 	{
 		size_t old_size = get_alloc_size(ptr);
