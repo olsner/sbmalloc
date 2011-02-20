@@ -430,16 +430,19 @@ static void* get_page()
 static void free_page(void* page)
 {
 	memset(page, 0, sizeof(pairing_ptr_heap));
-	if (g_n_free_pages && page == (u8*)sbrk(0) - PAGE_SIZE)
+	void* cur_break = sbrk(0);
+	if (g_n_free_pages && page == (u8*)cur_break - PAGE_SIZE)
 	{
 		debug("Freed last page (%p info %p), shrinking heap\n", page, get_pageinfo(page));
 		uintptr_t offset = ((uintptr_t)page - g_first_page) >> PAGE_SHIFT;
 		size_t free_pages = 0;
-		while (offset && !g_pages[offset])
+		g_pages[offset] = NULL;
+		do
 		{
 			free_pages++;
 			offset--;
 		}
+		while (offset && g_pages[offset] == NULL);
 		debug("Freeing %ld last pages (%p..%p)\n", free_pages, (u8*)cur_break - free_pages * PAGE_SIZE, cur_break);
 		sbrk(-free_pages * PAGE_SIZE);
 		debug("Break now %p (was %p)\n", sbrk(0), cur_break);
