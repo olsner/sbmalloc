@@ -504,9 +504,17 @@ static void* get_page()
 	}
 }
 
+static void add_to_freelist(void* page)
+{
+	debug("Adding %p to page free-list\n", page);
+	memset(page, 0, sizeof(pairing_ptr_heap));
+	g_free_pages = insert(g_free_pages, (pairing_ptr_heap*)page);
+	g_n_free_pages++;
+	set_pageinfo(page, MAGIC_PAGE_FREE);
+}
+
 static void free_page(void* page)
 {
-	memset(page, 0, sizeof(pairing_ptr_heap));
 	void* cur_break = sbrk(0);
 	if (g_n_free_pages && page == (u8*)cur_break - PAGE_SIZE)
 	{
@@ -526,11 +534,15 @@ static void free_page(void* page)
 	}
 	else
 	{
-		debug("Adding %p to page free-list\n", page);
-		g_free_pages = insert(g_free_pages, (pairing_ptr_heap*)page);
-		g_n_free_pages++;
-		set_pageinfo(page, MAGIC_PAGE_FREE);
+		add_to_freelist(page);
 	}
+}
+
+static void register_magic_pages(void* ptr_, size_t count)
+{
+	u8* ptr = (u8*)ptr_;
+	set_pageinfo(ptr, MAGIC_PAGE_FIRST);
+	while (--count) set_pageinfo(ptr += PAGE_SIZE, MAGIC_PAGE_FOLLO);
 }
 
 /**
@@ -538,13 +550,24 @@ static void free_page(void* page)
  */
 static void* get_pages(size_t n)
 {
-	if (n == 1) return get_page();
-
-	// Align. Might not be required? Depends on who calls sbrk first...
-	uintptr_t cur = (uintptr_t)sbrk(0);
-	sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
-	void* ret = sbrk(PAGE_SIZE * n);
-	debug("get_pages: %ld pages: %p\n", n, ret);
+	void* ret;
+	if (n == 1)
+	{
+		ret = get_page();
+	}
+	else
+	{
+		// Align. Might not be required? Depends on who calls sbrk first...
+		uintptr_t cur = (uintptr_t)sbrk(0);
+		sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
+		ret = sbrk(PAGE_SIZE * n);
+		debug("get_pages: %ld pages: %p\n", n, ret);
+	}
+	if (unlikely(ret == (void*)-1))
+	{
+		return NULL;
+	}
+	register_magic_pages(ret, n);
 	return ret;
 }
 
@@ -735,13 +758,6 @@ static size_t get_alloc_size(void* ptr)
 	return info->size;
 }
 
-static void register_magic_pages(void* ptr_, size_t count)
-{
-	u8* ptr = (u8*)ptr_;
-	set_pageinfo(ptr, MAGIC_PAGE_FIRST);
-	while (--count) set_pageinfo(ptr += PAGE_SIZE, MAGIC_PAGE_FOLLO);
-}
-
 static void *malloc_unlocked(size_t size)
 {
 	if (!size)
@@ -758,10 +774,6 @@ static void *malloc_unlocked(size_t size)
 		size_t npages = (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
 		debug("Allocating %ld from %ld fresh pages\n", size, npages);
 		void* ret = get_pages(npages);
-		if (ret)
-		{
-			register_magic_pages(ret, npages);
-		}
 		debug("X ALLOC %p\n", ret);
 		return ret;
 	}
@@ -799,6 +811,52 @@ void* malloc(size_t size)
 {
 	SCOPELOCK();
 	return malloc_unlocked(size);
+}
+
+static int posix_memalign_unlocked(void** ret, size_t align, size_t size)
+{
+	// TODO Check that align is a power-of-two and larger than sizeof(void*)
+
+	// Everything is 16-byte aligned in this malloc
+	if (align <= 16)
+	{
+		*ret = malloc_unlocked(align);
+		return *ret ? 0 : ENOMEM;
+	}
+
+	if (align > 4096)
+	{
+		if (align % 4096)
+		{
+			*ret = 0;
+			return EINVAL;
+		}
+		xassert(align < 16*1024*1024);
+		void* old_break = sbrk(0);
+		while ((uintptr_t)old_break % align)
+		{
+			old_break = (u8*)sbrk(PAGE_SIZE) + PAGE_SIZE;
+			set_pageinfo((u8*)old_break - PAGE_SIZE, NULL);
+		}
+		size_t npages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+		if (npages == 1) npages++;
+		*ret = get_pages(npages);
+	}
+	else
+	{
+		// All powers of two will be aligned on powers of two, up to 4096 anyway
+		size_t aligned_size = ((size + align - 1) / align) * align;
+		*ret = malloc_unlocked(aligned_size);
+	}
+	assert(!((uintptr_t)*ret % align));
+	return *ret ? 0 : ENOMEM;
+}
+
+extern "C" int posix_memalign(void** ret, size_t align, size_t size) __attribute__((visibility("default")));
+int posix_memalign(void** ret, size_t align, size_t size)
+{
+	SCOPELOCK();
+	return posix_memalign_unlocked(ret, align, size);
 }
 
 void* calloc(size_t n, size_t sz)
