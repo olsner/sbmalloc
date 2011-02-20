@@ -503,11 +503,21 @@ static void dump_pages()
 		pageinfo* page = *pagep++;
 		if (unlikely(IS_MAGIC_PAGE(page)))
 		{
-			xassert(page == MAGIC_PAGE_FIRST);
-			pageinfo** first = pagep;
-			while (*pagep == MAGIC_PAGE_FOLLO)
-				pagep++;
-			printf("%p: %ld page(s)\n", addr, 1 + pagep - first);
+			if (page == MAGIC_PAGE_FIRST)
+			{
+				pageinfo** first = pagep;
+				while (*pagep == MAGIC_PAGE_FOLLO)
+					pagep++;
+				printf("%p: %ld page(s)\n", addr, 1 + pagep - first);
+			}
+			else if (page == MAGIC_PAGE_FREE)
+			{
+				printf("%p: on page free-list\n", addr, (uintptr_t)page);
+			}
+			else
+			{
+				printf("%p: magic %ld\n", addr, (uintptr_t)page);
+			}
 		}
 		else if (likely(page))
 		{
