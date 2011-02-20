@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -14,7 +15,7 @@
 
 #include <pthread.h>
 
-//static void xprintf(const char* fmt, ...);
+static void xprintf(const char* fmt, ...);
 static void panic(const char* fmt, ...) __attribute__((noreturn));
 static void dump_pages();
 #define xassert(e) if (unlikely(e)); else panic("Assertion failed! " #e)
@@ -31,12 +32,13 @@ typedef uint64_t u64;
 #endif
 
 #ifdef DEBUG
-#define debug printf
+#define debug xprintf
 #define IFDEBUG(X) /*X*/
 #else
 #define debug(...) (void)0
 #define IFDEBUG(X) /* nothing */
 #endif
+#define printf xprintf
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
@@ -231,12 +233,137 @@ static pageinfo* get_pageinfo(void* ptr);
 #define LAST_MAGIC_PAGE 3
 #define IS_MAGIC_PAGE(page) ((((uintptr_t)page) & 0x0f) && ((((uintptr_t)page) & 0xff) < LAST_MAGIC_PAGE))
 
-#if 0
+template <typename T>
+void format_num(FILE* file, int width, bool leading_zero, bool sign, int base, bool show_base, T num)
+{
+	if (sign && num < 0)
+	{
+		// FIXME Doesn't work for the most negative value of T :/
+		num = -num;
+		fputc_unlocked('-', file);
+	}
+	if (show_base)
+	{
+		assert(base == 16);
+		fputc_unlocked('0', file);
+		fputc_unlocked('x', file);
+	}
+	char buf[32];
+	memset(buf, 0, sizeof(buf));
+	size_t len = 0;
+	do
+	{
+		buf[len++] = "0123456789abcdef"[num % base];
+		num /= base;
+	}
+	while (num);
+	if (width)
+	{
+		int c = leading_zero ? '0' : ' ';
+		while (len < (size_t)width--)
+		{
+			fputc_unlocked(c, file);
+		}
+	}
+	while (len--)
+	{
+		fputc_unlocked(buf[len], file);
+	}
+}
+
+const char* read_width(const char* fmt, int* width)
+{
+	errno = 0;
+	char* endptr = NULL;
+	*width = strtol(fmt, &endptr, 10);
+	assert(!errno);
+	return endptr;
+}
+
+static void xvfprintf(FILE* file, const char* fmt, va_list ap)
+{
+	flockfile(file);
+	while (*fmt)
+	{
+		const char* nextformat = strchr(fmt, '%');
+		if (!nextformat)
+		{
+			fwrite_unlocked(fmt, 1, strlen(fmt), file);
+			break;
+		}
+		else
+		{
+			fwrite_unlocked(fmt, 1, nextformat - fmt, file);
+			fmt = nextformat + 1;
+		}
+		for (;;)
+		{
+			bool is_long = false;
+			bool is_size = false;
+			bool leading_zero = false;
+			bool sign = true;
+			bool show_base = false;
+			int width = 0;
+			int before_point = 0;
+			int base = 10;
+			switch (*fmt++)
+			{
+			case '%':
+				fputc_unlocked('%', file);
+				break;
+			case 'x':
+				base = 16;
+			case 'u':
+				sign = false;
+			case 'd':
+				if (is_long)
+					format_num(file, width, leading_zero, sign, base, show_base, va_arg(ap, long));
+				else if (is_size)
+					format_num(file, width, leading_zero, sign, base, show_base, va_arg(ap, size_t));
+				else
+					format_num(file, width, leading_zero, sign, base, show_base, va_arg(ap, int));
+				break;
+			case 'p':
+				format_num(file, 0, false, false, 16, true, (uintptr_t)va_arg(ap, void*));
+				break;
+			case 'l':
+				is_long = true;
+				continue;
+			case 'z':
+				is_size = true;
+				continue;
+			case '#':
+				show_base = true;
+				continue;
+			case '.':
+				before_point = width;
+				width = 0;
+				continue;
+			case '0':
+				leading_zero = true;
+				fmt = read_width(fmt, &width);
+				continue;
+			default:
+				if (isdigit(fmt[-1]))
+				{
+					fmt = read_width(fmt - 1, &width);
+					continue;
+				}
+				abort();
+			}
+			break;
+		}
+	}
+	funlockfile(file);
+}
+
 static void xprintf(const char* fmt, ...)
 {
-	// TODO Make an xprintf that never allocates!
+	va_list ap;
+	va_start(ap, fmt);
+	xvfprintf(stdout, fmt, ap);
+	va_end(ap);
 }
-#endif
 
 static void panic(const char* fmt, ...)
 {
@@ -372,7 +499,8 @@ static void dump_pages()
 	}
 	assert(!corrupt);
 	printf(":pmud egaP\n");
-	printf("Used %lu of %lu (%.02f%%)\n", used, allocated, allocated ? (100 * used / float(allocated)) : 0);
+	size_t p = allocated ? 10000 * used / allocated : 0;
+	printf("Used %lu of %lu (%d.%02d%%)\n", used, allocated, p / 100, p % 100);
 	fflush(stdout);
 }
 
