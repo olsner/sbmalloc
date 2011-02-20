@@ -646,7 +646,7 @@ static size_t get_alloc_size(void* ptr)
 	pageinfo* info = get_pageinfo(ptr);
 	if (unlikely(IS_MAGIC_PAGE(info)))
 	{
-		return get_magic_page_size(info, ptr);
+		return PAGE_SIZE * get_magic_page_size(info, ptr);
 	}
 	if (unlikely(!info)) panic("get_alloc_size for unknown pointer %p", ptr);
 	return info->size;
