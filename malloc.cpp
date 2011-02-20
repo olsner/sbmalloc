@@ -408,9 +408,10 @@ static size_t ix_size(size_t ix)
 
 static void* get_page()
 {
-	if (void* ret = g_free_pages)
+	if (pairing_ptr_heap* ret = g_free_pages)
 	{
-		g_free_pages = delete_min(g_free_pages);
+		xprintf("Unlinking %p from free-list\n", ret);
+		g_free_pages = delete_min(ret);
 		g_n_free_pages--;
 		return ret;
 	}
@@ -438,11 +439,12 @@ static void free_page(void* page)
 			free_pages++;
 			offset--;
 		}
-		xprintf("Freeing %ld last pages\n", free_pages);
+		xprintf("Freeing %ld last pages (%p..%p)\n", free_pages, (u8*)sbrk(0) - free_pages * PAGE_SIZE, sbrk(0));
 		sbrk(-free_pages * PAGE_SIZE);
 	}
 	else
 	{
+		xprintf("Adding %p to page free-list\n", page);
 		g_free_pages = insert(g_free_pages, (pairing_ptr_heap*)page);
 		g_n_free_pages++;
 	}
