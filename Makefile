@@ -8,7 +8,7 @@ FASTCXXFLAGS = $(CXXFLAGS) -O2 -march=native
 DEBUGCXXFLAGS = $(CXXFLAGS) \
 	-DDEBUG \
 	-ftrapv -funwind-tables
-LDFLAGS = -lrt -ldl
+LDFLAGS = -lrt -ldl -lpthread
 LDSOFLAGS = $(LDFLAGS) -Wl,-no-undefined
 GHCFLAGS = -O2 -fvia-c
 

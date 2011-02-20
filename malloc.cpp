@@ -1,8 +1,11 @@
+#define _POSIX_C_SOURCE 200112L
+
 #include <ctype.h>
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <malloc.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -18,6 +21,7 @@
 static void xprintf(const char* fmt, ...);
 static void panic(const char* fmt, ...) __attribute__((noreturn));
 static void dump_pages();
+static void dump_pages_safe();
 #define xassert(e) if (likely(e)); else panic("Assertion failed! " #e)
 #define xassert_abort(e) if (likely(e)); else abort()
 
@@ -41,6 +45,10 @@ typedef uint64_t u64;
 #endif
 #define printf xprintf
 
+static void free_unlocked(void* ptr);
+static void* malloc_unlocked(size_t size);
+static void* realloc_unlocked(void* ptr, size_t new_size);
+
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
@@ -48,8 +56,77 @@ typedef uint64_t u64;
 #define MALLOC_CLEAR_MEM_AFTER 0xfd
 //#define FREE_CLEAR_MEM 0xdd
 
+#define THREAD_SAFE
+#define USE_SPINLOCKS
+
+static void init_lock();
+struct mallock
+{
+#if !defined(THREAD_SAFE)
+	void lock() {}
+	void unlock() {}
+#elif defined(USE_SPINLOCKS)
+	pthread_spinlock_t spinlock;
+
+	void init()
+	{
+		int res = pthread_spin_init(&spinlock, PTHREAD_PROCESS_PRIVATE);
+		xassert(res == 0);
+		xprintf("malloc initialized\n");
+	}
+	void lock()
+	{
+		init_lock();
+		int res = pthread_spin_lock(&spinlock);
+		xassert(res == 0);
+	}
+	void unlock()
+	{
+		init_lock();
+		int res = pthread_spin_unlock(&spinlock);
+		xassert(res == 0);
+	}
+#else
+#error Choose your poison
+#endif
+};
+static mallock g_lock;
+#ifdef THREAD_SAFE
+pthread_once_t mallock_init = PTHREAD_ONCE_INIT;
+static void init_lock_cb()
+{
+	g_lock.init();
+}
+void init_lock()
+{
+	pthread_once(&mallock_init, init_lock_cb);
+}
+#else
+void init_lock()
+{}
+#endif
+
+class scopelock
+{
+	scopelock(const scopelock&);
+	scopelock& operator=(const scopelock&);
+public:
+	scopelock()
+	{
+		g_lock.lock();
+	}
+	~scopelock()
+	{
+		g_lock.unlock();
+	}
+};
+
+#ifdef THREAD_SAFE
+#define SCOPELOCK(e) scopelock scopelock_ ## e
+#else
 static pthread_t get_owner();
-#define thread_check() xassert_abort(pthread_equal(get_owner(), pthread_self()))
+#define SCOPELOCK(e) xassert_abort(pthread_equal(get_owner(), pthread_self()))
+#endif
 
 /**
  * These are adapted to be stored internally in whatever data we have.
@@ -482,6 +559,12 @@ size_t page_allocated_space(pageinfo* page)
 	return (page->chunks - page->chunks_free) * page->size;
 }
 
+void dump_pages_safe()
+{
+	SCOPELOCK();
+	dump_pages();
+}
+
 static void dump_pages()
 {
 	printf("First, dump chunk-pages:\n");
@@ -600,7 +683,7 @@ static pageinfo* new_chunkpage(size_t size)
 	}
 	else
 	{
-		ret = (pageinfo*)malloc(pisize);
+		ret = (pageinfo*)malloc_unlocked(pisize);
 	}
 
 	memset(&ret->heap, 0, sizeof(ret->heap));
@@ -659,10 +742,8 @@ static void register_magic_pages(void* ptr_, size_t count)
 	while (--count) set_pageinfo(ptr += PAGE_SIZE, MAGIC_PAGE_FOLLO);
 }
 
-void *malloc(size_t size)
+static void *malloc_unlocked(size_t size)
 {
-	thread_check();
-
 	if (!size)
 	{
 #ifdef ZERO_ALLOC_RETURNS_NULL
@@ -714,23 +795,25 @@ void *malloc(size_t size)
 	return ret;
 }
 
+void* malloc(size_t size)
+{
+	SCOPELOCK();
+	return malloc_unlocked(size);
+}
+
 void* calloc(size_t n, size_t sz)
 {
-	thread_check();
-
 	size_t size = n * sz;
 	void* ptr = malloc(size);
 	if (likely(ptr)) memset(ptr, 0, size);
 	return ptr;
 }
 
-void* realloc(void* ptr, size_t new_size)
+void* realloc_unlocked(void* ptr, size_t new_size)
 {
-	thread_check();
-
 	if (!ptr)
 	{
-		return malloc(new_size);
+		return malloc_unlocked(new_size);
 	}
 
 	// If new_size is 0, successfully free ptr. But it's not clear if you must
@@ -741,10 +824,10 @@ void* realloc(void* ptr, size_t new_size)
 
 	if (unlikely(!new_size))
 	{
-		free(ptr);
+		free_unlocked(ptr);
 		// Since I have no better idea, reuse the arbitrary decision made for
 		// malloc(0) here (compile-time ifdef)
-		void* ret = malloc(0);
+		void* ret = malloc_unlocked(0);
 		debug("X REALLOC %p %lu %p %lu\n", ptr, old_size, ret, new_size);
 		return ret;
 	}
@@ -754,15 +837,21 @@ void* realloc(void* ptr, size_t new_size)
 		return ptr;
 	}
 
-	void* ret = malloc(new_size);
+	void* ret = malloc_unlocked(new_size);
 	assert(ret);
 	if (likely(ret))
 	{
 		memcpy(ret, ptr, new_size < old_size ? new_size : old_size);
-		free(ptr);
+		free_unlocked(ptr);
 	}
 	debug("X REALLOC %p %lu %p %lu\n", ptr, old_size, ret, new_size);
 	return ret;
+}
+
+void* realloc(void* ptr, size_t new_size)
+{
+	SCOPELOCK();
+	return realloc_unlocked(ptr, new_size);
 }
 
 #ifdef DEBUG
@@ -790,10 +879,14 @@ static void free_magic_page(pageinfo* magic, void* ptr)
 	}
 }
 
-void free(void *ptr)
+void free(void* ptr)
 {
-	thread_check();
+	SCOPELOCK();
+	return free_unlocked(ptr);
+}
 
+static void free_unlocked(void *ptr)
+{
 	if (unlikely(!ptr)) return;
 
 	debug("X FREE %p\n", ptr);
