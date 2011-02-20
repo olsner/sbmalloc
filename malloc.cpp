@@ -367,10 +367,20 @@ static void xprintf(const char* fmt, ...)
 
 static void panic(const char* fmt, ...)
 {
+	static bool panicked = false;
+	if (panicked)
+	{
+		xprintf("Recursive panic. Aborting.\n");
+		abort();
+	}
+	panicked++;
+
 	va_list ap;
 	va_start(ap, fmt);
-	vfprintf(stderr, fmt, ap);
-	fprintf(stderr, "\n");
+	flockfile(stderr);
+	xvfprintf(stderr, fmt, ap);
+	fputc('\n', stderr);
+	funlockfile(stderr);
 	va_end(ap);
 	dump_pages();
 	fflush(stdout);
