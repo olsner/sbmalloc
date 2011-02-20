@@ -18,7 +18,8 @@
 static void xprintf(const char* fmt, ...);
 static void panic(const char* fmt, ...) __attribute__((noreturn));
 static void dump_pages();
-#define xassert(e) if (unlikely(e)); else panic("Assertion failed! " #e)
+#define xassert(e) if (likely(e)); else panic("Assertion failed! " #e)
+#define xassert_abort(e) if (likely(e)); else abort()
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -46,6 +47,9 @@ typedef uint64_t u64;
 #define MALLOC_CLEAR_MEM 0xcc
 #define MALLOC_CLEAR_MEM_AFTER 0xfd
 //#define FREE_CLEAR_MEM 0xdd
+
+static pthread_t get_owner();
+#define thread_check() xassert_abort(pthread_equal(get_owner(), pthread_self()))
 
 /**
  * These are adapted to be stored internally in whatever data we have.
@@ -220,9 +224,6 @@ static uintptr_t g_first_page;
 static uintptr_t g_n_pages;
 // Assumes mostly contiguous pages...
 static pageinfo** g_pages;
-
-static pthread_t get_owner();
-#define thread_check() xassert(pthread_equal(get_owner(), pthread_self()))
 
 static void set_pageinfo(void* page, pageinfo* info);
 static pageinfo* get_pageinfo(void* ptr);
