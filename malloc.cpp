@@ -831,6 +831,62 @@ static int32_t xrand()
 	return (m_z << 16) + m_w;  /* 32-bit result */
 }
 
+static void fill_pattern(void* buf_, size_t size)
+{
+	u8* p = (u8*)buf_;
+	while (size--)
+	{
+		p[size] = size & 0xff;
+	}
+}
+
+static void test_pattern(void* buf_, size_t size)
+{
+	u8* p = (u8*)buf_;
+	while (size--)
+	{
+		xassert(p[size] == (size & 0xff));
+	}
+}
+
+static void selftest_realloc()
+{
+	void* buffer = NULL;
+	void* temp = NULL;
+	size_t size = 12, prev_size;
+
+	buffer = realloc(NULL, size);
+	fill_pattern(buffer, size);
+
+	prev_size = size;
+	size += 10;
+	buffer = realloc(buffer, size);
+	test_pattern(buffer, prev_size);
+	fill_pattern(buffer, size);
+
+	buffer = realloc(buffer, prev_size);
+	test_pattern(buffer, prev_size);
+
+	free(buffer);
+	buffer = malloc(32);
+	temp = realloc(buffer, 17);
+	xassert(temp == buffer);
+
+	size = 4097;
+	prev_size = 17;
+	fill_pattern(buffer, 17);
+	buffer = realloc(buffer, size);
+	test_pattern(buffer, 17);
+	fill_pattern(buffer, size);
+
+	buffer = realloc(buffer, 2 * size);
+	test_pattern(buffer, size);
+	fill_pattern(buffer, 2 * size);
+
+	buffer = realloc(buffer, size);
+	test_pattern(buffer, size);
+}
+
 static void selftest()
 {
 	const size_t DELAY = 1000;
@@ -877,6 +933,8 @@ static void selftest()
 	{
 		free(ptrs[i]);
 	}
+	
+	selftest_realloc();
 }
 
 pthread_t get_owner()
