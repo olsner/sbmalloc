@@ -411,7 +411,7 @@ static void* get_page()
 {
 	if (pairing_ptr_heap* ret = g_free_pages)
 	{
-		xprintf("Unlinking %p from free-list\n", ret);
+		debug("Unlinking %p from free-list\n", ret);
 		g_free_pages = delete_min(ret);
 		g_n_free_pages--;
 		return ret;
@@ -431,7 +431,7 @@ static void free_page(void* page)
 	memset(page, 0, sizeof(pairing_ptr_heap));
 	if (g_n_free_pages && page == (u8*)sbrk(0) - PAGE_SIZE)
 	{
-		xprintf("Freed last page, shrinking heap\n");
+		debug("Freed last page (%p info %p), shrinking heap\n", page, get_pageinfo(page));
 		uintptr_t offset = ((uintptr_t)page - g_first_page) >> PAGE_SHIFT;
 		size_t free_pages = 0;
 		while (offset && !g_pages[offset])
@@ -439,13 +439,13 @@ static void free_page(void* page)
 			free_pages++;
 			offset--;
 		}
-		xprintf("Freeing %ld last pages (%p..%p)\n", free_pages, (u8*)sbrk(0) - free_pages * PAGE_SIZE, sbrk(0));
+		debug("Freeing %ld last pages (%p..%p)\n", free_pages, (u8*)cur_break - free_pages * PAGE_SIZE, cur_break);
 		sbrk(-free_pages * PAGE_SIZE);
-		xprintf("Break now %p\n", sbrk(0));
+		debug("Break now %p (was %p)\n", sbrk(0), cur_break);
 	}
 	else
 	{
-		xprintf("Adding %p to page free-list\n", page);
+		debug("Adding %p to page free-list\n", page);
 		g_free_pages = insert(g_free_pages, (pairing_ptr_heap*)page);
 		g_n_free_pages++;
 		set_pageinfo(page, MAGIC_PAGE_FREE);
