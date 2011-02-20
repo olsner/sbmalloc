@@ -512,7 +512,11 @@ static void dump_pages()
 			}
 			else if (page == MAGIC_PAGE_FREE)
 			{
-				printf("%p: on page free-list\n", addr, (uintptr_t)page);
+				printf("%p: on page free-list\n", addr);
+			}
+			else if (page == MAGIC_PAGE_PGINFO)
+			{
+				printf("%p: contains pageinfo\n", addr);
 			}
 			else
 			{
