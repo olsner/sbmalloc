@@ -728,24 +728,35 @@ void* realloc(void* ptr, size_t new_size)
 {
 	thread_check();
 
+	if (!ptr)
+	{
+		return malloc(new_size);
+	}
+
 	// If new_size is 0, successfully free ptr. But it's not clear if you must
 	// return non-null. Returning NULL normally means that allocation failed
 	// and the old allocation is untouched!
-	size_t old_size = ptr ? get_alloc_size(ptr) : 0;
+	size_t old_size = get_alloc_size(ptr);
+	debug("Reallocating %p from %lu to %lu\n", ptr, old_size, new_size);
 
 	if (unlikely(!new_size))
 	{
 		free(ptr);
 		// Since I have no better idea, reuse the arbitrary decision made for
 		// malloc(0) here (compile-time ifdef)
-		void* ret = malloc(new_size);
+		void* ret = malloc(0);
 		debug("X REALLOC %p %lu %p %lu\n", ptr, old_size, ret, new_size);
 		return ret;
 	}
 
+	if (new_size <= old_size)
+	{
+		return ptr;
+	}
+
 	void* ret = malloc(new_size);
 	assert(ret);
-	if (likely(ret && ptr))
+	if (likely(ret))
 	{
 		memcpy(ret, ptr, new_size < old_size ? new_size : old_size);
 		free(ptr);
