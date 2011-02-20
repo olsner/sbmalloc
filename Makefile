@@ -3,10 +3,10 @@
 CXXFLAGS = \
 	-fpic -DPIC -fvisibility=hidden -fvisibility-inlines-hidden \
 	-fno-rtti -fno-exceptions -fomit-frame-pointer \
-	-Wall
+	-Wall -g
 FASTCXXFLAGS = $(CXXFLAGS) -O2 -march=native
 DEBUGCXXFLAGS = $(CXXFLAGS) \
-	-g -DDEBUG \
+	-DDEBUG \
 	-ftrapv -funwind-tables
 LDFLAGS = -lrt -ldl
 LDSOFLAGS = $(LDFLAGS) -Wl,-no-undefined
