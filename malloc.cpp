@@ -231,7 +231,8 @@ static pageinfo* get_pageinfo(void* ptr);
 #define MAGIC_PAGE_FIRST ((pageinfo*)1)
 #define MAGIC_PAGE_FOLLO ((pageinfo*)2)
 #define MAGIC_PAGE_PGINFO ((pageinfo*)3)
-#define LAST_MAGIC_PAGE 4
+#define MAGIC_PAGE_FREE ((pageinfo*)4)
+#define LAST_MAGIC_PAGE 5
 #define IS_MAGIC_PAGE(page) ((((uintptr_t)page) & 0x0f) && ((((uintptr_t)page) & 0xff) < LAST_MAGIC_PAGE))
 
 template <typename T>
@@ -428,25 +429,26 @@ static void* get_page()
 static void free_page(void* page)
 {
 	memset(page, 0, sizeof(pairing_ptr_heap));
-	set_pageinfo(page, NULL);
 	if (g_n_free_pages && page == (u8*)sbrk(0) - PAGE_SIZE)
 	{
 		xprintf("Freed last page, shrinking heap\n");
 		uintptr_t offset = ((uintptr_t)page - g_first_page) >> PAGE_SHIFT;
 		size_t free_pages = 0;
-		while (offset && g_pages[offset] == 0)
+		while (offset && !g_pages[offset])
 		{
 			free_pages++;
 			offset--;
 		}
 		xprintf("Freeing %ld last pages (%p..%p)\n", free_pages, (u8*)sbrk(0) - free_pages * PAGE_SIZE, sbrk(0));
 		sbrk(-free_pages * PAGE_SIZE);
+		xprintf("Break now %p\n", sbrk(0));
 	}
 	else
 	{
 		xprintf("Adding %p to page free-list\n", page);
 		g_free_pages = insert(g_free_pages, (pairing_ptr_heap*)page);
 		g_n_free_pages++;
+		set_pageinfo(page, MAGIC_PAGE_FREE);
 	}
 }
 
