@@ -230,7 +230,8 @@ static pageinfo* get_pageinfo(void* ptr);
 #define MAGIC_PAGE_OTHER ((pageinfo*)0)
 #define MAGIC_PAGE_FIRST ((pageinfo*)1)
 #define MAGIC_PAGE_FOLLO ((pageinfo*)2)
-#define LAST_MAGIC_PAGE 3
+#define MAGIC_PAGE_PGINFO ((pageinfo*)3)
+#define LAST_MAGIC_PAGE 4
 #define IS_MAGIC_PAGE(page) ((((uintptr_t)page) & 0x0f) && ((((uintptr_t)page) & 0xff) < LAST_MAGIC_PAGE))
 
 template <typename T>
@@ -573,7 +574,7 @@ static pageinfo* new_chunkpage(size_t size)
 	if (!g_chunk_pages[size_ix(pisize)])
 	{
 		ret = (pageinfo*)get_page();
-		set_pageinfo(ret, NULL);
+		set_pageinfo(ret, MAGIC_PAGE_PGINFO);
 	}
 	else
 	{
