@@ -41,6 +41,10 @@ typedef uint64_t u64;
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+#define MALLOC_CLEAR_MEM 0xcc
+#define MALLOC_CLEAR_MEM_AFTER 0xfd
+//#define FREE_CLEAR_MEM 0xdd
+
 /**
  * These are adapted to be stored internally in whatever data we have.
  */
@@ -523,6 +527,13 @@ void *malloc(size_t size)
 		*pagep = newpage ? pageinfo_from_heap(newpage) : NULL;
 	}
 	assert(ret);
+#ifdef MALLOC_CLEAR_MEM
+	if (likely(ret))
+	{
+		memset(ret, MALLOC_CLEAR_MEM, size);
+		memset((u8*)ret + size, MALLOC_CLEAR_MEM_AFTER, page->size - size);
+	}
+#endif
 	return ret;
 }
 
@@ -598,6 +609,10 @@ void free(void *ptr)
 	}
 	if (unlikely(!page)) panic("free on unknown pointer %p", ptr);
 	assert(check_page_alignment(page, ptr));
+
+#ifdef FREE_CLEAR_MEM
+	memset(ptr, FREE_CLEAR_MEM, page->size);
+#endif
 
 	bool was_filled = page_filled(page);
 
