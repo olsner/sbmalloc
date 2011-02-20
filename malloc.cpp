@@ -937,6 +937,8 @@ static void free_magic_page(pageinfo* magic, void* ptr)
 	}
 }
 
+//#define FREE_IS_NOT_FREE
+
 void free(void* ptr)
 {
 	SCOPELOCK();
@@ -952,7 +954,9 @@ static void free_unlocked(void *ptr)
 	pageinfo* page = get_pageinfo(ptr);
 	if (unlikely(IS_MAGIC_PAGE(page)))
 	{
+#ifndef FREE_IS_NOT_FREE
 		free_magic_page(page, ptr);
+#endif
 		return;
 	}
 	if (unlikely(!page)) panic("free on unknown pointer %p", ptr);
@@ -962,6 +966,7 @@ static void free_unlocked(void *ptr)
 	memset(ptr, FREE_CLEAR_MEM, page->size);
 #endif
 
+#ifndef FREE_IS_NOT_FREE
 	bool was_filled = page_filled(page);
 
 	IFDEBUG(dump_pages();)
@@ -985,7 +990,14 @@ static void free_unlocked(void *ptr)
 		// TODO Logic for page reuse.
 		// For now: keep it in the free-heap for the chunksize regardless.
 		// We can't easily extradict it from the pairing heap :)
+
+		/*
+		 * maybe something like this:
+		 * if first free page for chunk size, keep it
+		 * else: delete from pairing heap and put on page-free list
+		 */
 	}
+#endif
 }
 
 static int32_t xrand()
