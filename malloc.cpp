@@ -435,6 +435,8 @@ static void xvfprintf(FILE* file, const char* fmt, va_list ap)
 		}
 	}
 	funlockfile(file);
+	fflush(file);
+	fflush(stderr); // HACK
 }
 
 static void xprintf(const char* fmt, ...)
