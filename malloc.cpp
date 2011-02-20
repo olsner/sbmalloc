@@ -656,13 +656,13 @@ static void selftest()
 		xassert((1u << i) == ix_size(ix));
 	}
 
+	void* ptrs[DELAY] = {0};
+	for (size_t i = 0; i < DELAY; i++)
+	{
+		ptrs[i] = malloc(xrand() % MAXALLOC);
+	}
 	while (iters--)
 	{
-		void* ptrs[DELAY] = {0};
-		for (size_t i = 0; i < DELAY; i++)
-		{
-			ptrs[i] = malloc(xrand() % MAXALLOC);
-		}
 		for (size_t i = 0; i < NTESTS; i++)
 		{
 			size_t size = xrand() % MAXALLOC;
@@ -674,10 +674,10 @@ static void selftest()
 			ptrs[imalloc] = malloc(size);
 			IFDEBUG(dump_pages());
 		}
-		for (size_t i = 0; i < DELAY; i++)
-		{
-			free(ptrs[i]);
-		}
+	}
+	for (size_t i = 0; i < DELAY; i++)
+	{
+		free(ptrs[i]);
 	}
 }
 
