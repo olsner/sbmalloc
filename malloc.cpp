@@ -426,9 +426,25 @@ static void* get_page()
 static void free_page(void* page)
 {
 	memset(page, 0, sizeof(pairing_ptr_heap));
-	g_free_pages = insert(g_free_pages, (pairing_ptr_heap*)page);
-	g_n_free_pages++;
 	set_pageinfo(page, NULL);
+	if (g_n_free_pages && page == (u8*)sbrk(0) - PAGE_SIZE)
+	{
+		xprintf("Freed last page, shrinking heap\n");
+		uintptr_t offset = ((uintptr_t)page - g_first_page) >> PAGE_SHIFT;
+		size_t free_pages = 0;
+		while (offset && g_pages[offset] == 0)
+		{
+			free_pages++;
+			offset--;
+		}
+		xprintf("Freeing %ld last pages\n", free_pages);
+		sbrk(-free_pages * PAGE_SIZE);
+	}
+	else
+	{
+		g_free_pages = insert(g_free_pages, (pairing_ptr_heap*)page);
+		g_n_free_pages++;
+	}
 }
 
 /**
