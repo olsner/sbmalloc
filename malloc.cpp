@@ -689,7 +689,7 @@ static void dump_pages()
 static void set_pageinfo(void* page, pageinfo* info)
 {
 	uintptr_t offset;
-	if (g_pages)
+	if (likely(g_pages))
 	{
 		offset = ((uintptr_t)page - g_first_page) >> PAGE_SHIFT;
 	}
@@ -701,7 +701,7 @@ static void set_pageinfo(void* page, pageinfo* info)
 
 	//debug("set_pageinfo: Page %p info %p\n", page, info);
 
-	if (offset >= g_n_pages)
+	if (unlikely(offset >= g_n_pages))
 	{
 		size_t required = (sizeof(pageinfo*) * offset + PAGE_SIZE) & ~(PAGE_SIZE-1);
 		pageinfo** new_pages = (pageinfo**)mmap(NULL, required, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
@@ -754,10 +754,16 @@ static pageinfo* new_chunkpage(size_t size)
 static pageinfo* get_pageinfo(void* ptr)
 {
 	uintptr_t offset = ((uintptr_t)ptr - g_first_page) >> PAGE_SHIFT;
-	if (offset > g_n_pages) return NULL;
-	pageinfo* ret = g_pages[offset];
-	assert(!ret || IS_MAGIC_PAGE(ret) || !(((uintptr_t)ret->page ^ (uintptr_t)ptr) >> PAGE_SHIFT));
-	return ret;
+	if (unlikely(offset > g_n_pages))
+	{
+		return NULL;
+	}
+	else
+	{
+		pageinfo* ret = g_pages[offset];
+		assert(!ret || IS_MAGIC_PAGE(ret) || !(((uintptr_t)ret->page ^ (uintptr_t)ptr) >> PAGE_SHIFT));
+		return ret;
+	}
 }
 
 static size_t get_magic_page_size(pageinfo* info, void* ptr)
@@ -787,7 +793,7 @@ static size_t get_alloc_size(void* ptr)
 
 static void *malloc_unlocked(size_t size)
 {
-	if (!size)
+	if (unlikely(!size))
 	{
 #ifdef ZERO_ALLOC_RETURNS_NULL
 		return NULL;
