@@ -319,8 +319,8 @@ static pageinfo* get_pageinfo(void* ptr);
 #define MAGIC_PAGE_FOLLO ((pageinfo*)2)
 #define MAGIC_PAGE_PGINFO ((pageinfo*)3)
 #define MAGIC_PAGE_FREE ((pageinfo*)4)
-#define LAST_MAGIC_PAGE 5
-#define IS_MAGIC_PAGE(page) ((((uintptr_t)page) & 0x0f) && ((((uintptr_t)page) & 0xff) < LAST_MAGIC_PAGE))
+#define LAST_MAGIC_PAGE ((pageinfo*)5)
+#define IS_MAGIC_PAGE(page) ((page) && ((page) < LAST_MAGIC_PAGE))
 
 template <typename T>
 void format_num(FILE* file, int width, bool leading_zero, bool sign, int base, bool show_base, T num)
