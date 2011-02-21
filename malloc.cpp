@@ -52,9 +52,11 @@ static void* realloc_unlocked(void* ptr, size_t new_size);
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+#ifdef DEBUG
 #define MALLOC_CLEAR_MEM 0xcc
 #define MALLOC_CLEAR_MEM_AFTER 0xfd
-//#define FREE_CLEAR_MEM 0xdd
+#define FREE_CLEAR_MEM 0xdd
+#endif
 
 #define THREAD_SAFE
 #define USE_SPINLOCKS
