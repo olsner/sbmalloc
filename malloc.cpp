@@ -607,6 +607,11 @@ static void dump_pages()
 	printf("Page dump:\n");
 	size_t used = 0;
 	size_t allocated = 0;
+	size_t freelist_pages = 0;
+	size_t magic_pages = 0;
+	size_t pginfo_pages = 0;
+	size_t unknown_magic = 0;
+
 	pageinfo** pagep = g_pages;
 	pageinfo** end = pagep + g_n_pages;
 	u8* addr = (u8*)g_first_page;
@@ -620,18 +625,23 @@ static void dump_pages()
 				pageinfo** first = pagep;
 				while (*pagep == MAGIC_PAGE_FOLLO)
 					pagep++;
-				printf("%p: %ld page(s)\n", addr, 1 + pagep - first);
+				size_t npages = 1 + pagep - first;
+				magic_pages += npages;
+				printf("%p: %ld page(s)\n", addr, npages);
 			}
 			else if (page == MAGIC_PAGE_FREE)
 			{
+				freelist_pages++;
 				printf("%p: on page free-list\n", addr);
 			}
 			else if (page == MAGIC_PAGE_PGINFO)
 			{
+				pginfo_pages++;
 				printf("%p: contains pageinfo\n", addr);
 			}
 			else
 			{
+				unknown_magic++;
 				printf("%p: magic %ld\n", addr, (uintptr_t)page);
 			}
 		}
@@ -658,6 +668,8 @@ static void dump_pages()
 	printf(":pmud egaP\n");
 	size_t p = allocated ? 10000 * used / allocated : 0;
 	printf("Used %lu of %lu (%d.%02d%%)\n", used, allocated, p / 100, p % 100);
+	printf("Pages: %zd freelist (%zd) %zd large allocs %zd pageinfo %zd unknown\n", freelist_pages, g_n_free_pages, magic_pages, pginfo_pages, unknown_magic);
+	assert(freelist_pages == g_n_free_pages);
 	fflush(stdout);
 }
 
