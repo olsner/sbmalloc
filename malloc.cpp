@@ -1000,13 +1000,11 @@ static void free_unlocked(void *ptr)
 #endif
 
 #ifndef FREE_IS_NOT_FREE
-	bool was_filled = page_filled(page);
-
 	IFDEBUG(dump_pages();)
 	page_free_chunk(page, ptr);
 	IFDEBUG(dump_pages();)
 
-	if (was_filled)
+	if (page->chunks_free == 1)
 	{
 		pageinfo** pagep = g_chunk_pages + page->index;
 		pageinfo* free_page = *pagep;
