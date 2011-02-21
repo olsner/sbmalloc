@@ -273,11 +273,15 @@ static int clear_first_set_bit(u8* bitmap, size_t maxbit)
 }
 static void set_bit(u8* const bitmap, const size_t ix)
 {
+#ifdef __x86_64__
+	__asm__("btsq %1, %0" : "+m" (*(u64*)bitmap) : "r" (ix));
+#else
 	const u8 mask = 1 << (ix & 7);
 	const size_t byte = ix >> 3;
 
 	assert(!(bitmap[byte] & mask));
 	bitmap[byte] |= mask;
+#endif
 }
 static void* page_get_chunk(pageinfo* page)
 {
