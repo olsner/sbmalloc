@@ -58,8 +58,10 @@ static void* realloc_unlocked(void* ptr, size_t new_size);
 #define FREE_CLEAR_MEM 0xdd
 #endif
 
+#ifndef TEST
 #define THREAD_SAFE
 #define USE_SPINLOCKS
+#endif
 
 static void init_lock();
 struct mallock
@@ -125,6 +127,8 @@ public:
 
 #ifdef THREAD_SAFE
 #define SCOPELOCK(e) scopelock scopelock_ ## e
+#elif defined(TEST)
+#define SCOPELOCK(e) (void)0
 #else
 static pthread_t get_owner();
 #define SCOPELOCK(e) xassert_abort(pthread_equal(get_owner(), pthread_self()))
