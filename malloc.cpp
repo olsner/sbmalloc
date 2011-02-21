@@ -76,7 +76,6 @@ struct mallock
 	{
 		int res = pthread_spin_init(&spinlock, PTHREAD_PROCESS_PRIVATE);
 		xassert(res == 0);
-		xprintf("malloc initialized\n");
 	}
 	void lock()
 	{
