@@ -253,27 +253,27 @@ static int clear_first_set_bit(u8* bitmap, size_t maxbit)
 		const u8 found = bitmap[i];
 		if (found)
 		{
-			u8 mask = 0x80;
+			u8 mask = 0x1;
 			size_t n = i << 3;
 			while (mask)
 			{
-				assert(mask == (1 << (7 - (n & 7))));
+				assert(mask == (1 << (n & 7)));
 				assert(n >> 3 == i);
 				if (mask & found)
 				{
 					bitmap[i] = found & ~mask;
 					return n;
 				}
-				mask >>= 1;
+				mask <<= 1;
 				n++;
 			}
 		}
 	}
 	panic("No free chunks found?");
 }
-static void set_bit(u8* bitmap, size_t ix)
+static void set_bit(u8* const bitmap, const size_t ix)
 {
-	const u8 mask = 1 << (7 - (ix & 7));
+	const u8 mask = 1 << (ix & 7);
 	const size_t byte = ix >> 3;
 
 	assert(!(bitmap[byte] & mask));
