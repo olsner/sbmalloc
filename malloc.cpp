@@ -239,7 +239,6 @@ struct splay_node
 	Sp right;
 
 };
-
 struct splay_tree
 {
 	typedef splay_node S;
@@ -247,6 +246,11 @@ struct splay_tree
 
 	Sp root;
 	Sp min;
+
+	splay_tree():
+		root(NULL),
+		min(NULL)
+	{}
 
 	operator bool()
 	{
@@ -313,6 +317,7 @@ struct splay_tree
 	{
 		Sp small, big;
 		partition(node, root, &small, &big);
+		// node already in tree, just stitch it back together
 		if (small == node)
 		{
 			assert(!small->right);
@@ -324,18 +329,19 @@ struct splay_tree
 			node->right = big;
 		}
 		root = node;
-		if (node < min)
+		if (node < min || !min)
 			min = node;
 	}
 
 	static Sp find_min(Sp node)
 	{
-		while (node->left)
-			node = node->left;
+		if (node)
+			while (node->left)
+				node = node->left;
 		return node;
 	}
 
-	Sp get_min()
+	Sp get_min() const
 	{
 		return min;
 	}
@@ -427,7 +433,7 @@ struct splay_tree
 		}
 	}
 };
-static splay_node* get_min(splay_tree p)
+static splay_node* get_min(const splay_tree& p)
 {
 	return p.get_min();
 }
@@ -435,10 +441,9 @@ static void delete_min(splay_tree& p)
 {
 	p.delete_min();
 }
-static splay_node* insert(splay_tree& t, splay_node* node)
+static void insert(splay_tree& t, splay_node* node)
 {
 	t.insert(node);
-	return t.get_min();
 }
 
 struct pageinfo
@@ -532,7 +537,10 @@ static void page_free_chunk(pageinfo* page, void* ptr)
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 
-static pairing_ptr_heap g_free_pages;
+typedef splay_tree freepage_heap;
+typedef splay_node freepage_node;
+
+static freepage_heap g_free_pages;
 static size_t g_n_free_pages;
 static pairing_ptr_heap g_chunk_pages[N_SIZES];
 static uintptr_t g_first_page;
@@ -731,28 +739,29 @@ static size_t ix_size(size_t ix)
 
 static void* get_page()
 {
-	if (pairing_ptr_node *const ret = get_min(g_free_pages))
+	void* ret = get_min(g_free_pages);
+	if (ret)
 	{
 		debug("Unlinking %p from free-list\n", ret);
 		delete_min(g_free_pages);
 		g_n_free_pages--;
-		return ret;
 	}
 	else
 	{
+		debug("Free-list empty, allocating fresh page\n", ret);
 		uintptr_t cur = (uintptr_t)sbrk(0);
 		sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
-		void* ret = sbrk(PAGE_SIZE);
-		debug("get_page: %p\n", ret);
-		return ret;
+		ret = sbrk(PAGE_SIZE);
 	}
+	debug("get_page: %p\n", ret);
+	return ret;
 }
 
 static void add_to_freelist(void* page)
 {
 	debug("Adding %p to page free-list\n", page);
-	memset(page, 0, sizeof(pairing_ptr_node));
-	insert(g_free_pages, (pairing_ptr_node*)page);
+	memset(page, 0, sizeof(freepage_node));
+	insert(g_free_pages, (freepage_node*)page);
 	g_n_free_pages++;
 	set_pageinfo(page, MAGIC_PAGE_FREE);
 }
