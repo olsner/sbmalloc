@@ -257,21 +257,82 @@ struct splay_tree
 		return !!root;
 	}
 
+	size_t slow_count() const
+	{
+		return slow_count(root);
+	}
+
+	static size_t slow_count(Sp root)
+	{
+		return root ? 1 + slow_count(root->left) + slow_count(root->right) : 0;
+	}
+
 	void remove(Sp node)
+	{
+		assert(root);
+		size_t old_count = slow_count();
+		if (node == min)
+		{
+			delete_min();
+		}
+		else
+		{
+			root = remove(root, node);
+		}
+		assert(slow_count() == old_count - 1);
+	}
+
+	static Sp remove(Sp root, Sp node)
 	{
 		Sp small, big;
 		partition(node, root, &small, &big);
-		// If new_root != node, then the node wasn't in the tree and we don't
-		// have do to anything.
-		if (small == node)
+#ifdef DEBUG
+		debug("Remove %p. Smaller:\n", node);
+		dump_inorder(small, 0);
+		debug("Remove %p. Bigger:\n", node);
+		dump_inorder(big, 0);
+		debug("small %p, node %p, small->left %p, big %p\n", small, node, small->left, big);
+#endif
+		// It's an error to remove something not in the tree
+		assert(small);
+		// After the partition, node must be the max of the left tree
+		assert(!node->right);
+
+		Sp dummy;
+		partition(node-1, small, &small, &dummy);
+		// dummy must only contain node, and node must not have any children
+		assert(dummy == node && !node->left && !node->right);
+
+		// Insert the big tree in place of 'node' in the small tree
+		Sp p = small;
+		while (p->right && p->right != node) p = p->right;
+		p->right = big;
+
+#ifdef DEBUG
+		debug("Remove %p. Done:\n", node);
+		dump_inorder(small, 0);
+		debug("End.\n");
+#endif
+
+		return small;
+	}
+
+	void remove_to_end(Sp start)
+	{
+		root = remove_to_end(root, start);
+		if (min >= start)
 		{
-			small = small->left;
+			assert(!root);
+			min = NULL;
 		}
-		root = merge(small, big);
-		if (node == min)
-		{
-			min = find_min(root);
-		}
+	}
+
+	static Sp remove_to_end(Sp root, Sp start)
+	{
+		Sp dummy;
+		partition(start-1, root, &root, &dummy);
+		assert(find_min(dummy) <= start);
+		return root;
 	}
 
 	void delete_min()
@@ -301,16 +362,6 @@ struct splay_tree
 			*ret = x;
 			delete_min(a, &x->left);
 		}
-	}
-
-	static Sp merge(Sp small, Sp big)
-	{
-		if (!small)
-			return big;
-		Sp p = small;
-		while (p->right) p = p->right;
-		p->right = big;
-		return small;
 	}
 
 	void insert(Sp node)
@@ -432,6 +483,27 @@ struct splay_tree
 			}
 		}
 	}
+
+	void dump_tree()
+	{
+		xprintf("Splay-heap: root %p min %p\n", root, min);
+		dump_inorder(root, 0);
+		xprintf("End\n");
+	}
+
+	static void dump_inorder(Sp node, int d)
+	{
+		if (!node)
+			xprintf("%02d: NULL\n", d);
+		else
+		{
+			if (node->left)
+				dump_inorder(node->left, d + 1);
+			xprintf("%02d: %p\n", d, node);
+			if (node->right)
+				dump_inorder(node->right, d + 1);
+		}
+	}
 };
 static splay_node* get_min(const splay_tree& p)
 {
@@ -444,10 +516,24 @@ static void delete_min(splay_tree& p)
 static void insert(splay_tree& t, splay_node* node)
 {
 	t.insert(node);
+	//debug("Inserted %p:\n", node);
+	//t.dump_tree();
+}
+static void remove(splay_tree& t, splay_node* node)
+{
+	t.remove(node);
+}
+static void remove_to_end(splay_tree& t, u8* start)
+{
+	t.remove_to_end((splay_node*)start);
+}
+static void dump_heap(splay_tree& t)
+{
+	t.dump_tree();
 }
 
-typedef pairing_ptr_heap chunkpage_heap;
-typedef pairing_ptr_node chunkpage_node;
+typedef splay_tree chunkpage_heap;
+typedef splay_node chunkpage_node;
 
 struct pageinfo
 {
@@ -850,9 +936,10 @@ static void dump_pages()
 	bool corrupt = false;
 	for (size_t i = 0; i < N_SIZES; i++)
 	{
-		pageinfo* page = pageinfo_from_heap(get_min(g_chunk_pages[i]));
-		if (page)
+		chunkpage_node* min = get_min(g_chunk_pages[i]);
+		if (min)
 		{
+			pageinfo* page = pageinfo_from_heap(min);
 			size_t size = ix_size(i);
 			printf("%p: %ld, size %ld: ", page->page, i, size);
 			print_pageinfo(page);
@@ -1052,8 +1139,8 @@ static void *malloc_unlocked(size_t size)
 		return ret;
 	}
 
-	pairing_ptr_heap* pagep = g_chunk_pages + size_ix(size);
-	pairing_ptr_node* min = get_min(*pagep);
+	chunkpage_heap* pagep = g_chunk_pages + size_ix(size);
+	chunkpage_node* min = get_min(*pagep);
 	pageinfo* page = min ? pageinfo_from_heap(min) : NULL;
 	if (unlikely(!page))
 	{
