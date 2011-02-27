@@ -869,8 +869,20 @@ static void free_page(void* page)
 			free_pages++;
 			offset--;
 		}
-		while (offset && g_pages[offset] == NULL);
+		while (offset && (g_pages[offset] == NULL || g_pages[offset] == MAGIC_PAGE_FREE));
+
+		remove_to_end(g_free_pages, (u8*)cur_break - free_pages * PAGE_SIZE);
+		for (pageinfo **p = g_pages + offset + 1, **end = p + free_pages; p < end; p++)
+		{
+			if (*p == MAGIC_PAGE_FREE)
+			{
+				*p = NULL;
+				g_n_free_pages--;
+			}
+		}
+
 		debug("Freeing %ld last pages (%p..%p)\n", free_pages, (u8*)cur_break - free_pages * PAGE_SIZE, cur_break);
+		//dump_heap(g_free_pages);
 		sbrk(-free_pages * PAGE_SIZE);
 		debug("Break now %p (was %p)\n", sbrk(0), cur_break);
 	}
@@ -878,6 +890,7 @@ static void free_page(void* page)
 	{
 		add_to_freelist(page);
 	}
+	dump_pages();
 }
 
 static void register_magic_pages(void* ptr_, size_t count)
@@ -903,8 +916,8 @@ static void* get_pages(size_t n)
 		uintptr_t cur = (uintptr_t)sbrk(0);
 		sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
 		ret = sbrk(PAGE_SIZE * n);
-		debug("get_pages: %ld pages: %p\n", n, ret);
 	}
+	debug("get_pages: %ld pages: %p\n", n, ret);
 	if (unlikely(ret == (void*)-1))
 	{
 		return NULL;
@@ -1001,7 +1014,7 @@ static void dump_pages()
 		}
 		else
 		{
-			//printf("Not used (or pagedir info)\n");
+			printf("%p: Not used (%p)\n", addr, page);
 		}
 		addr += 4096;
 	}
@@ -1027,11 +1040,12 @@ static void set_pageinfo(void* page, pageinfo* info)
 		offset = 0;
 	}
 
-	//debug("set_pageinfo: Page %p info %p\n", page, info);
+	debug("set_pageinfo: Page %p info %p\n", page, info);
 
 	if (unlikely(offset >= g_n_pages))
 	{
 		size_t required = (sizeof(pageinfo*) * offset + PAGE_SIZE) & ~(PAGE_SIZE-1);
+		debug("Resizing page table from %ld to %ld\n", g_n_pages, required / sizeof(pageinfo*));
 		pageinfo** new_pages = (pageinfo**)mmap(NULL, required, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 		assert(new_pages != MAP_FAILED);
 
@@ -1043,6 +1057,7 @@ static void set_pageinfo(void* page, pageinfo* info)
 	}
 
 	g_pages[offset] = info;
+	debug("set_pageinfo: Page %p info %p\n", page, g_pages[offset]);
 }
 
 static pageinfo* new_chunkpage(size_t size)
@@ -1316,7 +1331,12 @@ static void free_unlocked(void *ptr)
 	if (unlikely(IS_MAGIC_PAGE(page)))
 	{
 #ifndef FREE_IS_NOT_FREE
-		free_magic_page(page, ptr);
+		if (page == MAGIC_PAGE_FIRST)
+			free_magic_page(page, ptr);
+		else if (page == MAGIC_PAGE_PGINFO)
+			free_page(ptr);
+		else
+			xassert(false);
 #endif
 		return;
 	}
@@ -1349,6 +1369,18 @@ static void free_unlocked(void *ptr)
 		 * if first free page for chunk size, keep it
 		 * else: delete from pairing heap and put on page-free list
 		 */
+		chunkpage_heap& heap = g_chunk_pages[page->index];
+		//if (&page->heap != get_min(heap) /* && heap.size() > N */)
+		{
+			//debug("PRE RM %p\n", &page->heap);
+			//dump_heap(heap);
+			remove(heap, &page->heap);
+			//debug("POST RM %p\n", &page->heap);
+			//dump_heap(heap);
+			free_page(page->page);
+			page->page = 0;
+			free_unlocked(page);
+		}
 	}
 #endif
 }
