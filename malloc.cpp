@@ -136,24 +136,38 @@ static pthread_t get_owner();
 /**
  * These are adapted to be stored internally in whatever data we have.
  */
-struct pairing_ptr_heap
+struct pairing_ptr_node
 {
-	typedef pairing_ptr_heap T;
-	typedef pairing_ptr_heap* Tp;
-
 	/**
 	 * down,right: first child and right sibling of this page in pairing heap
 	 * of pages with free space.
 	 */
-	pairing_ptr_heap* down;
-	pairing_ptr_heap* right;
+	pairing_ptr_node* down;
+	pairing_ptr_node* right;
+};
+struct pairing_ptr_heap
+{
+	typedef pairing_ptr_node T;
+	typedef pairing_ptr_node* Tp;
 
-	Tp delete_min()
+	Tp min;
+
+	void delete_min()
 	{
-		assert(!right);
-		Tp l = down;
-		down = NULL;
-		return mergePairs(l);
+		assert(!min->right);
+		Tp l = min->down;
+		min->down = NULL;
+		min = mergePairs(l);
+	}
+
+	void insert(Tp r)
+	{
+		min = merge(min, r);
+	}
+
+	operator bool() const
+	{
+		return (bool)min;
 	}
 
 	static Tp mergePairs(Tp l)
@@ -202,14 +216,18 @@ struct pairing_ptr_heap
 		return l;
 	}
 };
-static void delete_min(pairing_ptr_heap*& p)
+static pairing_ptr_node* get_min(const pairing_ptr_heap& p)
 {
-	assert(p);
-	p = p->delete_min();
+	return p.min;
 }
-static pairing_ptr_heap* insert(pairing_ptr_heap* l, pairing_ptr_heap* r)
+static void delete_min(pairing_ptr_heap& p)
 {
-	return pairing_ptr_heap::merge(l, r);
+	assert(p.min);
+	p.delete_min();
+}
+static void insert(pairing_ptr_heap& heap, pairing_ptr_node* r)
+{
+	heap.insert(r);
 }
 
 struct splay_node
@@ -434,7 +452,7 @@ struct pageinfo
 	/**
 	 * The heap of address-sorted pages in this category that have free pages
 	 */
-	pairing_ptr_heap heap;
+	pairing_ptr_node heap;
 
 	u16 size;
 	//u16 isize;
@@ -514,9 +532,9 @@ static void page_free_chunk(pageinfo* page, void* ptr)
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 
-static pairing_ptr_heap* g_free_pages;
+static pairing_ptr_heap g_free_pages;
 static size_t g_n_free_pages;
-static pageinfo* g_chunk_pages[N_SIZES];
+static pairing_ptr_heap g_chunk_pages[N_SIZES];
 static uintptr_t g_first_page;
 static uintptr_t g_n_pages;
 // Assumes mostly contiguous pages...
@@ -713,7 +731,7 @@ static size_t ix_size(size_t ix)
 
 static void* get_page()
 {
-	if (pairing_ptr_heap *const ret = g_free_pages)
+	if (pairing_ptr_node *const ret = get_min(g_free_pages))
 	{
 		debug("Unlinking %p from free-list\n", ret);
 		delete_min(g_free_pages);
@@ -733,8 +751,8 @@ static void* get_page()
 static void add_to_freelist(void* page)
 {
 	debug("Adding %p to page free-list\n", page);
-	memset(page, 0, sizeof(pairing_ptr_heap));
-	g_free_pages = insert(g_free_pages, (pairing_ptr_heap*)page);
+	memset(page, 0, sizeof(pairing_ptr_node));
+	insert(g_free_pages, (pairing_ptr_node*)page);
 	g_n_free_pages++;
 	set_pageinfo(page, MAGIC_PAGE_FREE);
 }
@@ -820,7 +838,7 @@ static void dump_pages()
 	bool corrupt = false;
 	for (size_t i = 0; i < N_SIZES; i++)
 	{
-		pageinfo* page = g_chunk_pages[i];
+		pageinfo* page = pageinfo_from_heap(get_min(g_chunk_pages[i]));
 		if (page)
 		{
 			size_t size = ix_size(i);
@@ -1022,13 +1040,14 @@ static void *malloc_unlocked(size_t size)
 		return ret;
 	}
 
-	pageinfo** pagep = g_chunk_pages + size_ix(size);
-	pageinfo* page = *pagep;
+	pairing_ptr_heap* pagep = g_chunk_pages + size_ix(size);
+	pairing_ptr_node* min = get_min(*pagep);
+	pageinfo* page = min ? pageinfo_from_heap(min) : NULL;
 	if (unlikely(!page))
 	{
 		debug("Adding new chunk page for size %lu (cat %ld, size %ld)\n", size, size_ix(size), ix_size(size_ix(size)));
 		page = new_chunkpage(size);
-		*pagep = page;
+		insert(*pagep, &page->heap);
 	}
 	debug("Allocating %ld from %p (info %p, %d left)\n", size, page->page, page, page->chunks_free);
 	void* ret = page_get_chunk(page);
@@ -1037,9 +1056,7 @@ static void *malloc_unlocked(size_t size)
 	if (unlikely(page_filled(page)))
 	{
 		debug("Page %p (info %p) filled\n", page->page, page);
-		pairing_ptr_heap* newpage = &page->heap;
-		delete_min(newpage);
-		*pagep = newpage ? pageinfo_from_heap(newpage) : NULL;
+		delete_min(*pagep);
 	}
 	assert(ret);
 #ifdef MALLOC_CLEAR_MEM
@@ -1218,13 +1235,7 @@ static void free_unlocked(void *ptr)
 
 	if (page->chunks_free == 1)
 	{
-		pageinfo** pagep = g_chunk_pages + page->index;
-		pageinfo* free_page = *pagep;
-		if (!free_page)
-			*pagep = page;
-		else
-			*pagep = pageinfo_from_heap(insert(&free_page->heap, &page->heap));
-
+		insert(g_chunk_pages[page->index], &page->heap);
 		IFDEBUG(dump_pages();)
 	}
 	else if (unlikely(page->chunks_free == page->chunks))
