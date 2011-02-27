@@ -1447,6 +1447,8 @@ static void selftest_realloc()
 
 	buffer = realloc(buffer, size);
 	test_pattern(buffer, size);
+
+	free(buffer);
 }
 
 static void selftest()
