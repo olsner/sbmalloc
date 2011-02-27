@@ -202,10 +202,10 @@ struct pairing_ptr_heap
 		return l;
 	}
 };
-static pairing_ptr_heap* delete_min(pairing_ptr_heap* p)
+static void delete_min(pairing_ptr_heap*& p)
 {
 	assert(p);
-	return p->delete_min();
+	p = p->delete_min();
 }
 static pairing_ptr_heap* insert(pairing_ptr_heap* l, pairing_ptr_heap* r)
 {
@@ -713,10 +713,10 @@ static size_t ix_size(size_t ix)
 
 static void* get_page()
 {
-	if (pairing_ptr_heap* ret = g_free_pages)
+	if (pairing_ptr_heap *const ret = g_free_pages)
 	{
 		debug("Unlinking %p from free-list\n", ret);
-		g_free_pages = delete_min(ret);
+		delete_min(g_free_pages);
 		g_n_free_pages--;
 		return ret;
 	}
@@ -1037,7 +1037,8 @@ static void *malloc_unlocked(size_t size)
 	if (unlikely(page_filled(page)))
 	{
 		debug("Page %p (info %p) filled\n", page->page, page);
-		pairing_ptr_heap* newpage = delete_min(&page->heap);
+		pairing_ptr_heap* newpage = &page->heap;
+		delete_min(newpage);
 		*pagep = newpage ? pageinfo_from_heap(newpage) : NULL;
 	}
 	assert(ret);
