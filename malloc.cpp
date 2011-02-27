@@ -446,6 +446,9 @@ static void insert(splay_tree& t, splay_node* node)
 	t.insert(node);
 }
 
+typedef pairing_ptr_heap chunkpage_heap;
+typedef pairing_ptr_node chunkpage_node;
+
 struct pageinfo
 {
 	/**
@@ -457,7 +460,7 @@ struct pageinfo
 	/**
 	 * The heap of address-sorted pages in this category that have free pages
 	 */
-	pairing_ptr_node heap;
+	chunkpage_node heap;
 
 	u16 size;
 	//u16 isize;
@@ -542,7 +545,7 @@ typedef splay_node freepage_node;
 
 static freepage_heap g_free_pages;
 static size_t g_n_free_pages;
-static pairing_ptr_heap g_chunk_pages[N_SIZES];
+static chunkpage_heap g_chunk_pages[N_SIZES];
 static uintptr_t g_first_page;
 static uintptr_t g_n_pages;
 // Assumes mostly contiguous pages...
