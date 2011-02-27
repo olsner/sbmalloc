@@ -212,6 +212,257 @@ static pairing_ptr_heap* insert(pairing_ptr_heap* l, pairing_ptr_heap* r)
 	return pairing_ptr_heap::merge(l, r);
 }
 
+struct splay_node
+{
+	typedef splay_node S;
+	typedef S* Sp;
+
+	Sp left;
+	Sp right;
+
+};
+
+struct splay_tree
+{
+	typedef splay_node S;
+	typedef S* Sp;
+
+	Sp root;
+	Sp min;
+
+	operator bool()
+	{
+		return !!root;
+	}
+
+	void remove(Sp node)
+	{
+		Sp small, big;
+		partition(node, root, &small, &big);
+		// If new_root != node, then the node wasn't in the tree and we don't
+		// have do to anything.
+		if (small == node)
+		{
+			small = small->left;
+		}
+		root = merge(small, big);
+		if (node == min)
+		{
+			min = find_min(root);
+		}
+	}
+
+	static Sp merge(Sp small, Sp big)
+	{
+		if (!small)
+			return big;
+		Sp p = small;
+		while (p->right) p = p->right;
+		p->right = big;
+		return small;
+	}
+
+	void insert(Sp node)
+	{
+		Sp small, big;
+		partition(node, root, &small, &big);
+		if (small == node)
+		{
+			assert(!small->right);
+			node->right = big;
+		}
+		else
+		{
+			node->left = small;
+			node->right = big;
+		}
+		root = node;
+		if (node < min)
+			min = node;
+	}
+
+	static Sp find_min(Sp node)
+	{
+		while (node->left)
+			node = node->left;
+		return node;
+	}
+
+	Sp get_min()
+	{
+		return min;
+	}
+
+	// Note: No splay here(?), assuming we'll not do this very often.
+	Sp get_max()
+	{
+		assert(root);
+		Sp cur = root;
+		while (cur->right) cur = cur->right;
+		return cur;
+	}
+
+	// NB! Destructively updates 'node' and puts it in either the smaller or
+	// bigger tree.
+	// TODO Rewrite into something with two return values
+	static void partition(Sp pivot, Sp node, Sp* smaller, Sp* bigger)
+	{
+		if (!node)
+		{
+			*smaller = *bigger = NULL;
+			return;
+		}
+
+		Sp a = node->left, b = node->right;
+		if (node <= pivot)
+		{
+			if (b)
+			{
+				Sp b1 = b->left, b2 = b->right;
+				if (b <= pivot)
+				{
+					//a == node->left already
+					//node->left = a;
+					node->right = b1;
+					b->left = node;
+					*smaller = b;
+					partition(pivot, b2, &b->right, bigger);
+				}
+				else
+				{
+					//a == x->left already
+					//x->left = a;
+					*smaller = node;
+					// likewise, b2 == y->right
+					//y->right = b2;
+					*bigger = b;
+					partition(pivot, b1, &node->right, &b->left);
+				}
+			}
+			else
+			{
+				*smaller = node;
+				*bigger = NULL;
+			}
+		}
+		else
+		{
+			if (a)
+			{
+				Sp a1 = a->left, a2 = a->right;
+				if (a <= pivot)
+				{
+					*smaller = a;
+					// a1 == a->left
+					//a->left = a1;
+					*bigger = node;
+					// b == node->right
+					//node->right = b;
+
+					partition(pivot, a2, &a->right, &node->left);
+				}
+				else
+				{
+					*bigger = a;
+					a->right = node;
+					node->left = a2;
+					// b == node->right
+					//node->right = b;
+
+					partition(pivot, a1, smaller, &a->left);
+				}
+			}
+			else
+			{
+				*smaller = NULL;
+				*bigger = node;
+			}
+		}
+	}
+
+	static Sp splay(Sp root, uintptr_t node);
+	/*static Sp splay(Sp root, uintptr_t node)
+	{
+		Sp prev = NULL, cur = root;
+		// First, walk down from the root, inversing links
+		while (cur)
+		{
+			Sp next;
+			if (node < (uintptr_t)cur)
+			{
+				next = cur->left;
+				cur->left = prev;
+			}
+			else
+			{
+				next = cur->right;
+				cur->right = prev;
+				if (node == (uintptr_t)cur)
+				{
+					prev = cur;
+					break;
+				}
+			}
+			prev = cur;
+			cur = next;
+		}
+		while (prev)
+		{
+			Sp parent;
+			if (node < (uintptr_t)prev)
+			{
+				parent = prev->left;
+				prev->left = cur;
+			}
+			else
+			{
+				parent = prev->right;
+				prev->right = cur;
+			}
+
+			Sp grandparent = NULL;
+			if (parent)
+			{
+				grandparent = parent < node ? parent->left : parent->right;
+			}
+
+			// No grandparent, i.e. parent is the root.
+			if (!grandparent)
+			{
+				if (parent < node)
+					parent = rotateleft(parent);
+				else
+					parent = rotateright(parent);
+			}
+			else
+			{
+			}
+
+			cur = prev;
+			prev = parent;
+		}
+
+		return prev;
+	}*/
+
+	static Sp splay_min(Sp root)
+	{
+		return splay(root, (uintptr_t)0);
+	}
+
+	static Sp splay_max(Sp root)
+	{
+		return splay(root, (uintptr_t)-1);
+	}
+
+	static Sp splay(Sp root, Sp node)
+	{
+		if (!root) return node;
+		assert(node); // An error to try to splay around nothing
+		return splay(root, (uintptr_t)node);
+	}
+};
+
 struct pageinfo
 {
 	/**
