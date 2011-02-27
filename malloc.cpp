@@ -252,6 +252,35 @@ struct splay_tree
 		}
 	}
 
+	void delete_min()
+	{
+		assert(root);
+		delete_min(root, &root);
+		min = find_min(root);
+	}
+
+	static void delete_min(Sp node, Sp* ret)
+	{
+		if (!node->left)
+			*ret = node->right;
+		else if (!node->left->left)
+		{
+			node->left = node->left->right;
+			*ret = node;
+		}
+		else
+		{
+			Sp x = node->left, a = x->left, b = x->right;
+			Sp y = node; //Sp c = y->right;
+			x->right = y;
+			y->left = b;
+			// c == y->right
+			//y->right = c;
+			*ret = x;
+			delete_min(a, &x->left);
+		}
+	}
+
 	static Sp merge(Sp small, Sp big)
 	{
 		if (!small)
@@ -380,6 +409,19 @@ struct splay_tree
 		}
 	}
 };
+static splay_node* get_min(splay_tree p)
+{
+	return p.get_min();
+}
+static void delete_min(splay_tree& p)
+{
+	p.delete_min();
+}
+static splay_node* insert(splay_tree& t, splay_node* node)
+{
+	t.insert(node);
+	return t.get_min();
+}
 
 struct pageinfo
 {
