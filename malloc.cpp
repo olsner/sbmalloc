@@ -982,6 +982,8 @@ static void dump_pages()
 				size_t npages = 1 + pagep - first;
 				magic_pages += npages;
 				printf("%p: %ld page(s)\n", addr, npages);
+				addr += npages * PAGE_SIZE;
+				continue;
 			}
 			else if (page == MAGIC_PAGE_FREE)
 			{
