@@ -851,6 +851,7 @@ static void add_to_freelist(void* page)
 	debug("Adding %p to page free-list\n", page);
 	memset(page, 0, sizeof(freepage_node));
 	insert(g_free_pages, (freepage_node*)page);
+	//dump_heap(g_free_pages);
 	g_n_free_pages++;
 	set_pageinfo(page, MAGIC_PAGE_FREE);
 }
@@ -890,7 +891,7 @@ static void free_page(void* page)
 	{
 		add_to_freelist(page);
 	}
-	dump_pages();
+	//dump_pages();
 }
 
 static void register_magic_pages(void* ptr_, size_t count)
@@ -1016,7 +1017,7 @@ static void dump_pages()
 		}
 		else
 		{
-			printf("%p: Not used (%p)\n", addr, page);
+			//printf("%p: Not used (%p)\n", addr, page);
 		}
 		addr += 4096;
 	}
@@ -1514,7 +1515,7 @@ pthread_t get_owner()
 void init() __attribute__((constructor));
 void init()
 {
-	selftest();
+	//selftest();
 }
 
 #ifdef TEST
