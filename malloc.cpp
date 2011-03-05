@@ -38,7 +38,7 @@ typedef uint64_t u64;
 
 #ifdef DEBUG
 #define debug xprintf
-#define IFDEBUG(X) /*X*/
+#define IFDEBUG(X) X
 #else
 #define debug(...) (void)0
 #define IFDEBUG(X) /* nothing */
@@ -1351,14 +1351,11 @@ static void free_unlocked(void *ptr)
 #endif
 
 #ifndef FREE_IS_NOT_FREE
-	IFDEBUG(dump_pages();)
 	page_free_chunk(page, ptr);
-	IFDEBUG(dump_pages();)
 
 	if (page->chunks_free == 1)
 	{
 		insert(g_chunk_pages[page->index], &page->heap);
-		IFDEBUG(dump_pages();)
 	}
 	else if (unlikely(page->chunks_free == page->chunks))
 	{
@@ -1491,9 +1488,7 @@ static void selftest()
 			size_t imalloc = (xrand() % DELAY);
 			free(ptrs[ifree]);
 			ptrs[ifree] = ptrs[imalloc];
-			IFDEBUG(dump_pages());
 			ptrs[imalloc] = malloc(size);
-			IFDEBUG(dump_pages());
 		}
 	}
 	for (size_t i = 0; i < DELAY; i++)
