@@ -166,28 +166,51 @@ static bool page_filled(pageinfo* page)
 {
 	return !page->chunks_free;
 }
+size_t n_qword, n_dword, n_word, n_byte;
+template <typename T>
+static size_t clear_first_bit_in_word(T& word, size_t base_ix)
+{
+	T mask = 1;
+	size_t n = base_ix;
+	T found = word;
+	while (mask)
+	{
+		assert(mask == (((T)1) << (n - base_ix)));
+		if (mask & found)
+		{
+			word = found & ~mask;
+			return n;
+		}
+		mask <<= (T)1;
+		n++;
+	}
+	panic("No bits set in word?");
+}
 static int clear_first_set_bit(u8* bitmap, size_t maxbit)
 {
-	for (size_t i = 0; i < (maxbit + 7u) / 8u; i++)
+	size_t maxbyte = (maxbit + 7u) / 8u;
+	size_t i = 0;
+	u64* bitmap64 = (u64*)bitmap;
+	while (maxbyte > 7)
 	{
-		const u8 found = bitmap[i];
-		if (found)
+		u64& found = *bitmap64++;
+		if (likely(found))
 		{
-			u8 mask = 0x1;
-			size_t n = i << 3;
-			while (mask)
-			{
-				assert(mask == (1 << (n & 7)));
-				assert(n >> 3 == i);
-				if (mask & found)
-				{
-					bitmap[i] = found & ~mask;
-					return n;
-				}
-				mask <<= 1;
-				n++;
-			}
+			return clear_first_bit_in_word(found, i << 6);
 		}
+		maxbyte -= 8;
+		i++;
+	}
+	bitmap = (u8*)bitmap64;
+	i *= 8;
+	while (maxbyte--)
+	{
+		u8& found = *bitmap++;
+		if (likely(found))
+		{
+			return clear_first_bit_in_word(found, i << 3);
+		}
+		i++;
 	}
 	panic("No free chunks found?");
 }
