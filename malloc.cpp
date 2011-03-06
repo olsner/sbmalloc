@@ -917,7 +917,7 @@ static void* get_pages(size_t n)
 
 		// Align. Might not be required? Depends on who calls sbrk first...
 		uintptr_t cur = (uintptr_t)sbrk(0);
-		sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
+		xassert((cur % PAGE_SIZE) == 0);
 		ret = sbrk(PAGE_SIZE * n);
 	}
 	debug("get_pages: %ld pages: %p\n", n, ret);
