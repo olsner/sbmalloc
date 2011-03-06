@@ -403,6 +403,20 @@ static void panic(const char* fmt, ...)
 	abort();
 }
 
+static size_t large_size_ix(size_t size_)
+{
+	assert(size_ <= 2048);
+	uint16_t size = (uint16_t)size_;
+	if (likely(size <= 256))
+		return 8;
+	else if (likely(size <= 512))
+		return 9;
+	else if (likely(size <= 1024))
+		return 10;
+	else
+		return 11;
+}
+
 static size_t size_ix(size_t size)
 {
 	if (likely(size <= 128))
@@ -411,11 +425,7 @@ static size_t size_ix(size_t size)
 	}
 	else
 	{
-		size--;
-		size_t ix = 8; // 256 bytes
-		size >>= 8;
-		while (size) { size >>= 1; ix++; }
-		return ix;
+		return large_size_ix(size);
 	}
 }
 
@@ -772,8 +782,8 @@ static void *malloc_unlocked(size_t size)
 
 	chunkpage_heap* pagep = g_chunk_pages + size_ix(size);
 	chunkpage_node* min = get_min(*pagep);
-	pageinfo* page = min ? pageinfo_from_heap(min) : NULL;
-	if (unlikely(!page))
+	pageinfo* page = pageinfo_from_heap(min);
+	if (unlikely(!min))
 	{
 		debug("Adding new chunk page for size %lu (cat %ld, size %ld)\n", size, size_ix(size), ix_size(size_ix(size)));
 		page = new_chunkpage(size);
