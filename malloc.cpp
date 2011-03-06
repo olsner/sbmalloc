@@ -1057,16 +1057,11 @@ static void dump_pages()
 
 static void set_pageinfo(void* page, pageinfo* info)
 {
-	uintptr_t offset;
-	if (likely(g_pages))
-	{
-		offset = ((uintptr_t)page - g_first_page) >> PAGE_SHIFT;
-	}
-	else
+	if (unlikely(!g_pages))
 	{
 		g_first_page = (uintptr_t)page;
-		offset = 0;
 	}
+	uintptr_t offset = ((uintptr_t)page - g_first_page) >> PAGE_SHIFT;
 
 	debug("set_pageinfo: Page %p info %p\n", page, info);
 
