@@ -1114,7 +1114,7 @@ pthread_t get_owner()
 void init() __attribute__((constructor));
 void init()
 {
-	//selftest();
+	selftest();
 }
 
 #ifdef TEST
