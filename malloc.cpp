@@ -969,13 +969,16 @@ static void dump_pages()
 	size_t magic_pages = 0;
 	size_t pginfo_pages = 0;
 	size_t unknown_magic = 0;
+	size_t chunk_pages = 0;
 
 	pageinfo** pagep = g_pages;
 	pageinfo** end = pagep + g_n_pages;
 	u8* addr = (u8*)g_first_page;
+	u8* last_non_free = NULL;
 	while (pagep < end)
 	{
 		pageinfo* page = *pagep++;
+		bool free = false;
 		if (unlikely(IS_MAGIC_PAGE(page)))
 		{
 			if (page == MAGIC_PAGE_FIRST)
@@ -985,14 +988,21 @@ static void dump_pages()
 					pagep++;
 				size_t npages = 1 + pagep - first;
 				magic_pages += npages;
-				printf("%p: %ld page(s)\n", addr, npages);
-				addr += npages * PAGE_SIZE;
-				continue;
+				printf("%p: %ld page(s) large alloc\n", addr, npages);
+				addr += (npages - 1) * PAGE_SIZE;
 			}
 			else if (page == MAGIC_PAGE_FREE)
 			{
-				freelist_pages++;
-				printf("%p: on page free-list\n", addr);
+				size_t n = 1;
+				while (pagep < end && *pagep == MAGIC_PAGE_FREE)
+				{
+					pagep++;
+					n++;
+				}
+				printf("%p: %ld page(s) free-list\n", addr, n);
+				addr += (n - 1) *PAGE_SIZE;
+				freelist_pages += n;
+				free = true;
 			}
 			else if (page == MAGIC_PAGE_PGINFO)
 			{
@@ -1017,20 +1027,32 @@ static void dump_pages()
 
 			allocated += PAGE_SIZE;
 			used += page_allocated_space(page);
+			chunk_pages++;
 		}
 		else
 		{
 			//printf("%p: Not used (%p)\n", addr, page);
+			free = true;
 		}
+		if (!free)
+			last_non_free = addr;
 		addr += 4096;
 	}
-	assert(!corrupt);
 	printf(":pmud egaP\n");
 	size_t p = allocated ? 10000 * used / allocated : 0;
 	printf("Used %lu of %lu (%d.%02d%%)\n", used, allocated, p / 100, p % 100);
-	printf("Pages: %zd freelist (%zd) %zd large allocs %zd pageinfo %zd unknown\n", freelist_pages, g_n_free_pages, magic_pages, pginfo_pages, unknown_magic);
-	assert(freelist_pages == g_n_free_pages);
+	printf("Pages: %zd freelist (%zd) %zd large allocs %zd pageinfo %zd chunkpages %zd unknown\n", freelist_pages, g_n_free_pages, magic_pages, pginfo_pages, chunk_pages, unknown_magic);
+	size_t total_pages = freelist_pages + magic_pages + pginfo_pages + chunk_pages;
+	printf( "last non-free page %p\n"
+			"sbrk               %p\n"
+			"first page         %p\n", last_non_free, sbrk(0), g_first_page);
+	printf("%ld bytes in sbrk\n", (uintptr_t)sbrk(0) - g_first_page);
+	printf("%ld bytes in known pages\n", total_pages * PAGE_SIZE);
+	printf("%ld bytes in page table\n", g_n_pages * PAGE_SIZE);
 	fflush(stdout);
+	assert(!corrupt);
+	assert(freelist_pages == g_n_free_pages);
+	assert(!unknown_magic);
 }
 
 static void set_pageinfo(void* page, pageinfo* info)
