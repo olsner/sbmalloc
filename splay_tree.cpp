@@ -39,7 +39,7 @@ struct splay_tree
 	void remove(Sp node)
 	{
 		assert(root);
-		size_t old_count = slow_count();
+		IFDEBUG(size_t old_count = slow_count();)
 		if (node == min)
 		{
 			delete_min();
@@ -296,7 +296,9 @@ static void remove_to_end(splay_tree& t, u8* start)
 {
 	t.remove_to_end((splay_node*)start);
 }
+#if 0
 static void dump_heap(splay_tree& t)
 {
 	t.dump_tree();
 }
+#endif

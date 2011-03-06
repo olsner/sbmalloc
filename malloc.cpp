@@ -21,7 +21,6 @@
 static void xprintf(const char* fmt, ...);
 static void panic(const char* fmt, ...) __attribute__((noreturn));
 static void dump_pages();
-static void dump_pages_safe();
 #define xassert(e) if (likely(e)); else panic("Assertion failed! " #e)
 #define xassert_abort(e) if (likely(e)); else abort()
 
@@ -63,13 +62,11 @@ static void* realloc_unlocked(void* ptr, size_t new_size);
 #define USE_SPINLOCKS
 #endif
 
+#ifdef THREAD_SAFE
 static void init_lock();
 struct mallock
 {
-#if !defined(THREAD_SAFE)
-	void lock() {}
-	void unlock() {}
-#elif defined(USE_SPINLOCKS)
+#if defined(USE_SPINLOCKS)
 	pthread_spinlock_t spinlock;
 
 	void init()
@@ -94,7 +91,6 @@ struct mallock
 #endif
 };
 static mallock g_lock;
-#ifdef THREAD_SAFE
 pthread_once_t mallock_init = PTHREAD_ONCE_INIT;
 static void init_lock_cb()
 {
@@ -104,9 +100,6 @@ void init_lock()
 {
 	pthread_once(&mallock_init, init_lock_cb);
 }
-#else
-void init_lock()
-{}
 #endif
 
 class scopelock
@@ -114,6 +107,7 @@ class scopelock
 	scopelock(const scopelock&);
 	scopelock& operator=(const scopelock&);
 public:
+#ifdef THREAD_SAFE
 	scopelock()
 	{
 		g_lock.lock();
@@ -122,6 +116,7 @@ public:
 	{
 		g_lock.unlock();
 	}
+#endif
 };
 
 #ifdef THREAD_SAFE
@@ -542,12 +537,6 @@ static void print_pageinfo(pageinfo* page)
 size_t page_allocated_space(pageinfo* page)
 {
 	return (page->chunks - page->chunks_free) * page->size;
-}
-
-void dump_pages_safe()
-{
-	SCOPELOCK();
-	dump_pages();
 }
 
 static void dump_pages()
