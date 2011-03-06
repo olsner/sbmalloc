@@ -11,11 +11,20 @@ DEBUGCXXFLAGS = $(CXXFLAGS) \
 LDFLAGS = -lrt -ldl -lpthread
 LDSOFLAGS = $(LDFLAGS) -Wl,-no-undefined
 GHCFLAGS = -O2 -fvia-c
+DEPFLAGS = -MP -MT $@ $(addprefix -MT ,$(TARGETS))
 
-all: malloc.so malloc_debug.so test debugtest
+DEPFILES = malloc.D
 
+TARGETS = malloc.so malloc_debug.so test debugtest
+
+all: $(TARGETS)
+
+HUSH_DEP = @echo " [DEP]\t$<";
 HUSH_CXX = @echo " [CXX]\t$@";
 HUSH_CXX_DEBUG = @echo " [CXX]\t$@ [DEBUG]";
+
+%.D: %.cpp
+	$(HUSH_DEP) $(CXX) $(CXXFLAGS) $(DEPFLAGS) -MM -o $@ $<
 
 malloc.so: malloc.cpp
 	$(HUSH_CXX) $(CXX) $(FASTCXXFLAGS) -shared -o $@ $< $(LDSOFLAGS)
@@ -30,4 +39,6 @@ debugtest: malloc.cpp
 	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS) -DTEST
 
 clean:
-	rm -f malloc.so malloc_debug.so test debugtest
+	rm -f $(TARGETS) $(DEPFILES)
+
+-include $(DEPFILES)
