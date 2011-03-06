@@ -107,18 +107,27 @@ struct splay_tree
 	void delete_min()
 	{
 		assert(root);
-		delete_min(root, &root);
-		min = find_min(root);
+		min = delete_min(root, &root, NULL);
+		assert(min || !root);
+		assert(min == find_min(root));
 	}
 
-	static void delete_min(Sp node, Sp* ret)
+	static Sp delete_min(Sp node, Sp* ret, Sp min)
 	{
+		// node is the minimum node, replace with its right-subtree
 		if (!node->left)
-			*ret = node->right;
+		{
+			Sp right = node->right;
+			*ret = right;
+			return right ? find_min(right) : min;
+		}
+		// node->left is the minimum node, replace it with its right-subtree
 		else if (!node->left->left)
 		{
-			node->left = node->left->right;
+			Sp left = node->left->right;
+			node->left = left;
 			*ret = node;
+			return find_min(node);
 		}
 		else
 		{
@@ -129,7 +138,7 @@ struct splay_tree
 			// c == y->right
 			//y->right = c;
 			*ret = x;
-			delete_min(a, &x->left);
+			return delete_min(a, &x->left, x);
 		}
 	}
 
