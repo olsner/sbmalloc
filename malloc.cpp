@@ -1381,17 +1381,8 @@ static void free_unlocked(void *ptr)
 	else if (unlikely(page->chunks_free == page->chunks))
 	{
 		debug("Free: page %p (info %p) is now free\n", page->page, page);
-		// TODO Logic for page reuse.
-		// For now: keep it in the free-heap for the chunksize regardless.
-		// We can't easily extradict it from the pairing heap :)
-
-		/*
-		 * maybe something like this:
-		 * if first free page for chunk size, keep it
-		 * else: delete from pairing heap and put on page-free list
-		 */
 		chunkpage_heap& heap = g_chunk_pages[page->index];
-		//if (&page->heap != get_min(heap) /* && heap.size() > N */)
+		if (&page->heap != get_min(heap) /* && heap.size() > N */)
 		{
 			//debug("PRE RM %p\n", &page->heap);
 			//dump_heap(heap);
