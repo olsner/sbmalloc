@@ -18,6 +18,9 @@
 
 #include <pthread.h>
 
+#define PAGE_SHIFT 12
+#define PAGE_SIZE (1 << PAGE_SHIFT)
+
 static void xprintf(const char* fmt, ...);
 static void panic(const char* fmt, ...) __attribute__((noreturn));
 static void dump_pages();
@@ -232,6 +235,7 @@ static void* page_get_chunk(pageinfo* page)
 	assert(page->chunks_free);
 	page->chunks_free--;
 	size_t n = clear_first_set_bit(page->bitmap, page->chunks);
+	assert(n * page->size < PAGE_SIZE);
 	return (u8*)page->page + (n * page->size);
 }
 static void page_free_chunk(pageinfo* page, void* ptr)
@@ -245,8 +249,6 @@ static void page_free_chunk(pageinfo* page, void* ptr)
 }
 
 #define N_SIZES (128/16+4)
-#define PAGE_SHIFT 12
-#define PAGE_SIZE (1 << PAGE_SHIFT)
 
 typedef splay_tree freepage_heap;
 typedef splay_node freepage_node;
