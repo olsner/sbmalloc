@@ -408,6 +408,14 @@ static void xvfprintf(FILE* file, const char* fmt, va_list ap)
 	fflush(stderr); // HACK
 }
 
+static void xfprintf(FILE* fp, const char* fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	xvfprintf(fp, fmt, ap);
+	va_end(ap);
+}
+
 static void xprintf(const char* fmt, ...)
 {
 	va_list ap;
@@ -429,6 +437,7 @@ static void panic(const char* fmt, ...)
 	va_list ap;
 	va_start(ap, fmt);
 	flockfile(stderr);
+	xfprintf(stderr, "PANIC: ");
 	xvfprintf(stderr, fmt, ap);
 	fputc('\n', stderr);
 	funlockfile(stderr);
