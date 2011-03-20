@@ -170,53 +170,67 @@ static bool page_filled(pageinfo* page)
 {
 	return !page->chunks_free;
 }
-size_t n_qword, n_dword, n_word, n_byte;
-template <typename T>
-static size_t clear_first_bit_in_word(T& word, size_t base_ix)
+static int clear_first_set_bit(u8* bitmap, size_t maxbit)
 {
-	T mask = 1;
-	size_t n = base_ix;
-	T found = word;
+	unsigned maxbyte = 8 * ((maxbit + 63u) / 64u);
+	u8* start = bitmap;
+	u64 found;
+
+	while (maxbyte)
+	{
+		if (likely(found = *(u64*)bitmap))
+		{
+			goto found64;
+		}
+		bitmap += 8;
+		maxbyte -= 8;
+	}
+	panic("No free chunks found?");
+
+#ifdef __x86_64__
+found64:
+	u64 ix;
+	found = *(u64*)bitmap;
+	__asm__("bsf %1, %0" : "=r" (ix) : "r" (found));
+	//debug("Found %#lx at %d, first bit %d\n", found, (int)(bitmap - start), ix);
+	u64 bit = (u64)1 << ix;
+
+	assert(found & bit);
+	assert(!(found & (bit - 1)));
+
+	found ^= bit;
+
+	assert((found | bit) == *(u64*)bitmap);
+
+	*(u64*)bitmap = found;
+	ix += (bitmap - start) << 3;
+	assert(ix < maxbit);
+	return ix;
+#else
+found64:
+	if (!likely((u32)found))
+		bitmap += 4, found >>= 32;
+	if (!likely((u16)found))
+		bitmap += 2, found >>= 16;
+	if (!likely((u8)found))
+		bitmap++;
+
+	found = *bitmap;
+	u8 mask = 1;
+	size_t n = (bitmap - start) << 3;
 	while (mask)
 	{
-		assert(mask == (((T)1) << (n - base_ix)));
+		assert(mask == (1 << (n & 7)));
 		if (mask & found)
 		{
-			word = found & ~mask;
+			*bitmap = found & ~mask;
 			return n;
 		}
-		mask <<= (T)1;
+		mask <<= 1;
 		n++;
 	}
 	panic("No bits set in word?");
-}
-static int clear_first_set_bit(u8* bitmap, size_t maxbit)
-{
-	size_t maxbyte = (maxbit + 7u) / 8u;
-	size_t i = 0;
-	u64* bitmap64 = (u64*)bitmap;
-	while (maxbyte > 7)
-	{
-		u64& found = *bitmap64++;
-		if (likely(found))
-		{
-			return clear_first_bit_in_word(found, i << 6);
-		}
-		maxbyte -= 8;
-		i++;
-	}
-	bitmap = (u8*)bitmap64;
-	i *= 8;
-	while (maxbyte--)
-	{
-		u8& found = *bitmap++;
-		if (likely(found))
-		{
-			return clear_first_bit_in_word(found, i << 3);
-		}
-		i++;
-	}
-	panic("No free chunks found?");
+#endif
 }
 static void set_bit(u8* const bitmap, const size_t ix)
 {
