@@ -333,16 +333,16 @@ static void xvfprintf(FILE* file, const char* fmt, va_list ap)
 			fwrite_unlocked(fmt, 1, nextformat - fmt, file);
 			fmt = nextformat + 1;
 		}
+		bool is_long = false;
+		bool is_size = false;
+		bool leading_zero = false;
+		bool sign = true;
+		bool show_base = false;
+		int width = 0;
+		int before_point = 0;
+		int base = 10;
 		for (;;)
 		{
-			bool is_long = false;
-			bool is_size = false;
-			bool leading_zero = false;
-			bool sign = true;
-			bool show_base = false;
-			int width = 0;
-			int before_point = 0;
-			int base = 10;
 			switch (*fmt++)
 			{
 			case '%':
@@ -362,12 +362,13 @@ static void xvfprintf(FILE* file, const char* fmt, va_list ap)
 			case 'u':
 				sign = false;
 			case 'd':
+#define format_num_type(type) format_num(file, width, leading_zero, sign, base, show_base, va_arg(ap, type))
 				if (is_long)
-					format_num(file, width, leading_zero, sign, base, show_base, va_arg(ap, long));
+					sign ? format_num_type(long) : format_num_type(unsigned long);
 				else if (is_size)
-					format_num(file, width, leading_zero, sign, base, show_base, va_arg(ap, size_t));
+					format_num_type(size_t);
 				else
-					format_num(file, width, leading_zero, sign, base, show_base, va_arg(ap, int));
+					format_num_type(int);
 				break;
 			case 'p':
 				format_num(file, 0, false, false, 16, true, (uintptr_t)va_arg(ap, void*));
