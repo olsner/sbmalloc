@@ -21,7 +21,8 @@
 static void xprintf(const char* fmt, ...);
 static void panic(const char* fmt, ...) __attribute__((noreturn));
 static void dump_pages();
-#define xassert(e) if (likely(e)); else panic("Assertion failed! " #e)
+#define assert_failed(e, file, line) panic("Assertion failed! %s:%d: %s", file, line, e)
+#define xassert(e) if (likely(e)); else assert_failed(#e, __FILE__, __LINE__)
 #define xassert_abort(e) if (likely(e)); else abort()
 
 typedef uint8_t u8;
@@ -347,6 +348,15 @@ static void xvfprintf(FILE* file, const char* fmt, va_list ap)
 			case '%':
 				fputc_unlocked('%', file);
 				break;
+			case 's':
+			{
+				const char* arg = va_arg(ap, const char*);
+				if (arg)
+					fwrite_unlocked(arg, 1, strlen(arg), file);
+				else
+					fwrite_unlocked("(null)", 1, sizeof("(null)")-1, file);
+				break;
+			}
 			case 'x':
 				base = 16;
 			case 'u':
