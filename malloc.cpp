@@ -170,7 +170,7 @@ static bool page_filled(pageinfo* page)
 {
 	return !page->chunks_free;
 }
-static int clear_first_set_bit(u8* bitmap, size_t maxbit)
+static size_t clear_first_set_bit(u8* bitmap, size_t maxbit)
 {
 	unsigned maxbyte = 8 * ((maxbit + 63u) / 64u);
 	u8* start = bitmap;
@@ -208,27 +208,31 @@ found64:
 	return ix;
 #else
 found64:
-	if (!likely((u32)found))
-		bitmap += 4, found >>= 32;
-	if (!likely((u16)found))
-		bitmap += 2, found >>= 16;
-	if (!likely((u8)found))
-		bitmap++;
+	size_t n = bitmap - start;
 
-	found = *bitmap;
-	u8 mask = 1;
-	size_t n = (bitmap - start) << 3;
-	while (mask)
+	u32 temp = found;
+	if (!likely((u32)found))
+		n += 4, temp = found >> 32;
+	if (!likely((u16)temp))
+		n += 2, temp >>= 16;
+	if (!likely((u8)temp))
+		n++;
+
+	n <<= 3;
+	u64 mask = (u64)1 << (n & (7 * 8));
+	u64 maskmask = (u64)0xff << (n & (7 * 8));
+	do
 	{
-		assert(mask == (1 << (n & 7)));
+		assert(mask == ((u64)1 << (n & 63)));
 		if (mask & found)
 		{
-			*bitmap = found & ~mask;
+			*(u64*)bitmap = found & ~mask;
 			return n;
 		}
 		mask <<= 1;
 		n++;
 	}
+	while (mask & maskmask);
 	panic("No bits set in word?");
 #endif
 }
