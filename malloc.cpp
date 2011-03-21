@@ -187,27 +187,13 @@ static size_t clear_first_set_bit(u8* bitmap, size_t maxbit)
 	}
 	panic("No free chunks found?");
 
+found64:
 #ifdef __x86_64__
-found64:
 	u64 ix;
-	found = *(u64*)bitmap;
 	__asm__("bsf %1, %0" : "=r" (ix) : "r" (found));
-	//debug("Found %#lx at %d, first bit %d\n", found, (int)(bitmap - start), ix);
-	u64 bit = (u64)1 << ix;
-
-	assert(found & bit);
-	assert(!(found & (bit - 1)));
-
-	found ^= bit;
-
-	assert((found | bit) == *(u64*)bitmap);
-
-	*(u64*)bitmap = found;
-	ix += (bitmap - start) << 3;
-	assert(ix < maxbit);
-	return ix;
+	*(u64*)bitmap = found ^ ((u64)1 << ix);
+	return ix + ((bitmap - start) << 3);
 #else
-found64:
 	size_t n = bitmap - start;
 
 	u32 temp = found;
