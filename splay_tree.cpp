@@ -7,10 +7,14 @@ struct splay_node
 	Sp left;
 	Sp right;
 
+	const S* key() const
+	{
+		return this;
+	}
 };
+template <typename S>
 struct splay_tree
 {
-	typedef splay_node S;
 	typedef S* Sp;
 
 	Sp root;
@@ -89,7 +93,7 @@ struct splay_tree
 	void remove_to_end(Sp start)
 	{
 		root = remove_to_end(root, start);
-		if (min >= start)
+		if (min->key() >= start->key())
 		{
 			assert(!root);
 			min = NULL;
@@ -100,7 +104,7 @@ struct splay_tree
 	{
 		Sp dummy;
 		partition(start-1, root, &root, &dummy);
-		assert(find_min(dummy) <= start);
+		assert(find_min(dummy)->key() <= start->key());
 		return root;
 	}
 
@@ -158,7 +162,7 @@ struct splay_tree
 			node->right = big;
 		}
 		root = node;
-		if (node < min || !min)
+		if (!min || node->key() < min->key())
 			min = node;
 	}
 
@@ -196,12 +200,12 @@ struct splay_tree
 		}
 
 		Sp a = node->left, b = node->right;
-		if (node <= pivot)
+		if (node->key() <= pivot->key())
 		{
 			if (b)
 			{
 				Sp b1 = b->left, b2 = b->right;
-				if (b <= pivot)
+				if (b->key() <= pivot->key())
 				{
 					//a == node->left already
 					//node->left = a;
@@ -232,7 +236,7 @@ struct splay_tree
 			if (a)
 			{
 				Sp a1 = a->left, a2 = a->right;
-				if (a <= pivot)
+				if (a->key() <= pivot->key())
 				{
 					*smaller = a;
 					// a1 == a->left
@@ -283,27 +287,32 @@ struct splay_tree
 		}
 	}
 };
-static splay_node* get_min(const splay_tree& p)
+template<typename S>
+static S* get_min(const splay_tree<S>& p)
 {
 	return p.get_min();
 }
-static void delete_min(splay_tree& p)
+template<typename S>
+static void delete_min(splay_tree<S>& p)
 {
 	p.delete_min();
 }
-static void insert(splay_tree& t, splay_node* node)
+template<typename S>
+static void insert(splay_tree<S>& t, S* node)
 {
 	t.insert(node);
 	//debug("Inserted %p:\n", node);
 	//t.dump_tree();
 }
-static void remove(splay_tree& t, splay_node* node)
+template<typename S>
+static void remove(splay_tree<S>& t, S* node)
 {
 	t.remove(node);
 }
-static void remove_to_end(splay_tree& t, u8* start)
+template<typename S>
+static void remove_to_end(splay_tree<S>& t, u8* start)
 {
-	t.remove_to_end((splay_node*)start);
+	t.remove_to_end((S*)start);
 }
 #if 0
 static void dump_heap(splay_tree& t)

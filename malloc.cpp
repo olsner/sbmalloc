@@ -134,8 +134,8 @@ static pthread_t get_owner();
 
 #include "splay_tree.cpp"
 
-typedef splay_tree chunkpage_heap;
 typedef splay_node chunkpage_node;
+typedef splay_tree<chunkpage_node> chunkpage_heap;
 
 struct pageinfo
 {
@@ -254,8 +254,8 @@ static void page_free_chunk(pageinfo* page, void* ptr)
 
 #define N_SIZES (128/16+4)
 
-typedef splay_tree freepage_heap;
 typedef splay_node freepage_node;
+typedef splay_tree<freepage_node> freepage_heap;
 
 static freepage_heap g_free_pages;
 static size_t g_n_free_pages;
