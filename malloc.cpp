@@ -689,7 +689,7 @@ static void dump_pages()
 	printf( "last non-free page %p\n"
 			"first page         %p\n", last_non_free, g_first_page);
 	printf("%ld bytes in known pages\n", total_pages * PAGE_SIZE);
-	printf("%ld bytes in page table\n", g_n_pages * PAGE_SIZE);
+	printf("%ld bytes covered by page table (%ld bytes)\n", g_n_pages * PAGE_SIZE, g_n_pages * sizeof(pageinfo*));
 	fflush(stdout);
 	assert(!corrupt);
 	assert(freelist_pages == g_n_free_pages);
