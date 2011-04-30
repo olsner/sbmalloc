@@ -495,9 +495,7 @@ static void* get_page()
 	else
 	{
 		debug("Free-list empty, allocating fresh page\n", ret);
-		uintptr_t cur = (uintptr_t)sbrk(0);
-		sbrk((PAGE_SIZE - cur) & (PAGE_SIZE - 1));
-		ret = sbrk(PAGE_SIZE);
+		ret = mmap(0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	}
 	debug("get_page: %p\n", ret);
 	return ret;
@@ -513,39 +511,19 @@ static void add_to_freelist(void* page)
 	set_pageinfo(page, MAGIC_PAGE_FREE);
 }
 
+static const size_t SPARE_PAGES = 50;
+
 static void free_page(void* page)
 {
-	void* cur_break = sbrk(0);
-	if (g_n_free_pages && page == (u8*)cur_break - PAGE_SIZE)
+	if (g_n_free_pages > SPARE_PAGES)
 	{
-		debug("Freed last page (%p info %p), shrinking heap\n", page, get_pageinfo(page));
-		uintptr_t offset = ((uintptr_t)page - g_first_page) >> PAGE_SHIFT;
-		size_t free_pages = 0;
-		g_pages[offset] = NULL;
-		do
-		{
-			free_pages++;
-			offset--;
-		}
-		while (offset && (g_pages[offset] == NULL || g_pages[offset] == MAGIC_PAGE_FREE));
-
-		remove_to_end(g_free_pages, (u8*)cur_break - free_pages * PAGE_SIZE);
-		for (pageinfo **p = g_pages + offset + 1, **end = p + free_pages; p < end; p++)
-		{
-			if (*p == MAGIC_PAGE_FREE)
-			{
-				*p = NULL;
-				g_n_free_pages--;
-			}
-		}
-
-		debug("Freeing %ld last pages (%p..%p)\n", free_pages, (u8*)cur_break - free_pages * PAGE_SIZE, cur_break);
-		//dump_heap(g_free_pages);
-		sbrk(-free_pages * PAGE_SIZE);
-		debug("Break now %p (was %p)\n", sbrk(0), cur_break);
+		debug("Free page %p: Have spares - unmapping.\n", page);
+		set_pageinfo(page, NULL);
+		munmap(page, PAGE_SIZE);
 	}
 	else
 	{
+		debug("Free page %p: Not enough spares, caching.\n", page);
 		add_to_freelist(page);
 	}
 	//dump_pages();
@@ -570,12 +548,7 @@ static void* get_pages(size_t n)
 	}
 	else
 	{
-		// We really want to mmap here...
-
-		// Align. Might not be required? Depends on who calls sbrk first...
-		uintptr_t cur = (uintptr_t)sbrk(0);
-		xassert((cur % PAGE_SIZE) == 0);
-		ret = sbrk(PAGE_SIZE * n);
+		ret = mmap(0, n * PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	}
 	debug("get_pages: %ld pages: %p\n", n, ret);
 	if (unlikely(ret == (void*)-1))
@@ -695,9 +668,7 @@ static void dump_pages()
 	printf("Pages: %zd freelist (%zd) %zd large allocs %zd pageinfo %zd chunkpages %zd unknown\n", freelist_pages, g_n_free_pages, magic_pages, pginfo_pages, chunk_pages, unknown_magic);
 	size_t total_pages = freelist_pages + magic_pages + pginfo_pages + chunk_pages;
 	printf( "last non-free page %p\n"
-			"sbrk               %p\n"
-			"first page         %p\n", last_non_free, sbrk(0), g_first_page);
-	printf("%ld bytes in sbrk\n", (uintptr_t)sbrk(0) - g_first_page);
+			"first page         %p\n", last_non_free, g_first_page);
 	printf("%ld bytes in known pages\n", total_pages * PAGE_SIZE);
 	printf("%ld bytes in page table\n", g_n_pages * PAGE_SIZE);
 	fflush(stdout);
@@ -712,19 +683,52 @@ static void set_pageinfo(void* page, pageinfo* info)
 	{
 		g_first_page = (uintptr_t)page;
 	}
-	uintptr_t offset = ((uintptr_t)page - g_first_page) >> PAGE_SHIFT;
+	intptr_t offset = ((intptr_t)page - (intptr_t)g_first_page) >> PAGE_SHIFT;
 
 	debug("set_pageinfo: Page %p info %p\n", page, info);
 
-	if (unlikely(offset >= g_n_pages))
+	uintptr_t old_page = g_first_page;
+	pageinfo* old_pageinfo = NULL;
+	if (g_n_pages)
 	{
-		size_t required = (sizeof(pageinfo*) * offset + PAGE_SIZE) & ~(PAGE_SIZE-1);
+		for (size_t i = 0; i < g_n_pages; i++, old_page += 4096)
+		{
+			if (old_pageinfo = g_pages[i])
+			{
+				break;
+			}
+		}
+	}
+
+	if (unlikely((uintptr_t)offset >= g_n_pages || offset < 0))
+	{
+		size_t required = offset < 0 ? g_n_pages - offset : offset;
+		required = (sizeof(pageinfo*) * required + PAGE_SIZE) & ~(PAGE_SIZE-1);
 		debug("Resizing page table from %ld to %ld\n", g_n_pages, required / sizeof(pageinfo*));
 		pageinfo** new_pages = (pageinfo**)mmap(NULL, required, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 		assert(new_pages != MAP_FAILED);
 
-		memcpy(new_pages, g_pages, g_n_pages * sizeof(pageinfo*));
+		uintptr_t old_first_page = g_first_page;
+		if (offset < 0)
+		{
+			size_t adjustment = (-offset * sizeof(pageinfo*) + PAGE_SIZE) & ~(PAGE_SIZE - 1);
+			memcpy((u8*)new_pages + adjustment, g_pages, g_n_pages * sizeof(pageinfo*));
+			g_first_page -= adjustment * PAGE_SIZE / sizeof(pageinfo*);
+			offset += adjustment / sizeof(pageinfo*);
+		}
+		else
+		{
+			memcpy(new_pages, g_pages, g_n_pages * sizeof(pageinfo*));
+		}
 		munmap(g_pages, g_n_pages * sizeof(pageinfo*));
+		debug("Moved page table from %p (%ld) %p to %p (%ld) %p\n", g_pages, g_n_pages, old_first_page, new_pages, required / sizeof(pageinfo*), g_first_page);
+
+		if (g_n_pages)
+		{
+			intptr_t new_offset = ((intptr_t)old_page - (intptr_t)g_first_page) >> PAGE_SHIFT;
+			assert(new_offset < required / sizeof(pageinfo*) && new_offset >= 0);
+			assert(new_pages[new_offset] == old_pageinfo);
+		}
 
 		g_pages = new_pages;
 		g_n_pages = required / sizeof(pageinfo*);
@@ -878,23 +882,38 @@ static int posix_memalign_unlocked(void** ret, size_t align, size_t size)
 		return *ret ? 0 : ENOMEM;
 	}
 
-	if (align > 4096)
+	if (align > PAGE_SIZE)
 	{
-		if (align % 4096)
+		if (align % PAGE_SIZE)
 		{
 			*ret = 0;
 			return EINVAL;
 		}
 		xassert(align < 16*1024*1024);
-		void* old_break = sbrk(0);
-		while ((uintptr_t)old_break % align)
-		{
-			old_break = (u8*)sbrk(PAGE_SIZE) + PAGE_SIZE;
-			set_pageinfo((u8*)old_break - PAGE_SIZE, NULL);
-		}
 		size_t npages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
-		if (npages == 1) npages++;
-		*ret = get_pages(npages);
+
+		// Map some extra space, then unmap it afterwards :)
+		u8* page = (u8*)mmap(0, align + npages * PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+		if (page != MAP_FAILED)
+		{
+			u8* orig_page = page;
+			u8* allocated_end = page + align + npages * PAGE_SIZE;
+			uintptr_t misalign = (uintptr_t)page % align;
+			if (misalign)
+			{
+				page += align - misalign;
+				// Unmap header
+				munmap(orig_page, page - orig_page);
+			}
+			u8* used_end = page + npages * PAGE_SIZE;
+			// Unmap footer
+			munmap(used_end, allocated_end - used_end);
+			*ret = page;
+		}
+		else
+		{
+			*ret = NULL;
+		}
 	}
 	else
 	{
