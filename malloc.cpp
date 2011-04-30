@@ -696,6 +696,62 @@ static void dump_pages()
 	assert(!unknown_magic);
 }
 
+static void compact_pageinfo()
+{
+	intptr_t first_non_zero = -1;
+	intptr_t last_non_zero = -1;
+	for (size_t i = 0; i < g_n_pages; i++)
+	{
+		if (g_pages[i])
+		{
+			first_non_zero = i;
+			break;
+		}
+	}
+	for (size_t i = g_n_pages; i; i--)
+	{
+		if (g_pages[i - 1])
+		{
+			last_non_zero = i;
+			break;
+		}
+	}
+	// Whole thing is zero, free it
+	if (first_non_zero < 0)
+	{
+		printf("Page table empty: freeing everything");
+		munmap(g_pages, g_n_pages * sizeof(pageinfo*));
+		g_n_pages = 0;
+		g_pages = NULL;
+		g_first_page = 0;
+		return;
+	}
+
+	size_t tail_unused = last_non_zero >= 0 ? g_n_pages - last_non_zero : 0;
+	debug("Could save %ld + %ld pagetable entries\n", first_non_zero, tail_unused);
+
+	size_t entries_per_page = PAGE_SIZE / sizeof(pageinfo*);
+	if (tail_unused >= entries_per_page)
+	{
+		size_t remove_entries = (tail_unused / entries_per_page) * entries_per_page;
+		printf("Removing %ld unused entries at end\n", remove_entries);
+		munmap(g_pages + g_n_pages - remove_entries, remove_entries * sizeof(pageinfo*));
+		g_n_pages -= remove_entries;
+	}
+
+	if (first_non_zero >= entries_per_page)
+	{
+		size_t adjust_entries = (first_non_zero / entries_per_page) * entries_per_page;
+		printf("Removing %ld unused entries at start, new table size %ld\n", adjust_entries, g_n_pages - adjust_entries);
+		munmap(g_pages, adjust_entries * sizeof(pageinfo*));
+		g_n_pages -= adjust_entries;
+		g_first_page += adjust_entries * PAGE_SIZE;
+		g_pages += adjust_entries;
+
+		//dump_pages();
+	}
+}
+
 static void set_pageinfo(void* page, pageinfo* info)
 {
 	if (unlikely(!g_pages))
@@ -755,6 +811,8 @@ static void set_pageinfo(void* page, pageinfo* info)
 
 	g_pages[offset] = info;
 	debug("set_pageinfo: Page %p info %p\n", page, g_pages[offset]);
+
+	//compact_pageinfo();
 }
 
 static pageinfo* new_chunkpage(size_t size)
