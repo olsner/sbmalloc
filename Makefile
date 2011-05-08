@@ -8,8 +8,8 @@ FASTCXXFLAGS = $(CXXFLAGS) -O2 -march=native
 DEBUGCXXFLAGS = $(CXXFLAGS) \
 	-DDEBUG \
 	-ftrapv -funwind-tables
-LDFLAGS = -lrt -ldl -lpthread
-LDSOFLAGS = $(LDFLAGS) -Wl,-no-undefined
+LDFLAGS = -lrt -ldl -lpthread -Wl,-Bsymbolic
+LDSOFLAGS = $(LDFLAGS) -Wl,-no-undefined -Wl,-Bsymbolic
 GHCFLAGS = -O2 -fvia-c
 DEPFLAGS = -MP -MT $@ $(addprefix -MT ,$(TARGETS))
 
