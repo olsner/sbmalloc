@@ -48,6 +48,21 @@ typedef uint64_t u64;
 #endif
 #define printf xprintf
 
+#ifdef DEBUG
+static void* mmap_wrap(void* ptr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+	debug("mmap(%lu)\n", (unsigned long)length);
+	return mmap(ptr, length, prot, flags, fd, offset);
+}
+static int munmap_wrap(void* ptr, size_t length)
+{
+	debug("munmap(%lu)\n", (unsigned long)length);
+	return munmap(ptr, length);
+}
+#define munmap munmap_wrap
+#define mmap mmap_wrap
+#endif
+
 static void free_unlocked(void* ptr);
 static void* malloc_unlocked(size_t size);
 static void* realloc_unlocked(void* ptr, size_t new_size);
