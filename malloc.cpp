@@ -305,6 +305,7 @@ static pageinfo** g_pages;
 
 static void set_pageinfo(void* page, pageinfo* info);
 static pageinfo* get_pageinfo(void* ptr);
+static size_t get_magic_page_size(pageinfo* info, void* ptr);
 
 #define MAGIC_PAGE_OTHER ((pageinfo*)0)
 #define MAGIC_PAGE_FIRST ((pageinfo*)1)
@@ -567,6 +568,48 @@ static void free_page(void* page)
 		add_to_freelist(page);
 	}
 	//dump_pages();
+}
+
+static void free_magic_page(pageinfo* magic, void* ptr)
+{
+	debug("Free magic page %p (magic %ld)\n", ptr, (uintptr_t)magic);
+	assert(magic == MAGIC_PAGE_FIRST);
+	size_t npages = get_magic_page_size(magic, ptr);
+	size_t reusepages = 0;
+	debug("Free: Page %p (%ld pages)\n", ptr, npages);
+	if (g_n_free_pages < SPARE_PAGES)
+	{
+		reusepages = SPARE_PAGES - g_n_free_pages;
+		if (reusepages < npages)
+		{
+			npages -= reusepages;
+		}
+		else
+		{
+			reusepages = npages;
+			npages = 0;
+		}
+	}
+	u8* page = (u8*)ptr;
+	while (reusepages--)
+	{
+		IFDEBUG(
+		pageinfo* info = get_pageinfo(page);
+		assert(IS_MAGIC_PAGE(info) && (info == MAGIC_PAGE_FIRST || info == MAGIC_PAGE_FOLLO));
+		)
+		free_page(page);
+		page += PAGE_SIZE;
+	}
+	if (npages)
+	{
+		u8* start = page;
+		while (npages--)
+		{
+			set_pageinfo(page, NULL);
+			page += PAGE_SIZE;
+		}
+		munmap(start, page - start);
+	}
 }
 
 static void register_magic_pages(void* ptr_, size_t count)
@@ -1099,23 +1142,6 @@ static bool check_page_alignment(pageinfo* page, void* ptr)
 	return !(pos % page->size);
 }
 #endif
-
-static void free_magic_page(pageinfo* magic, void* ptr)
-{
-	debug("Free magic page %p (magic %ld)\n", ptr, (uintptr_t)magic);
-	assert(magic == MAGIC_PAGE_FIRST);
-	size_t npages = get_magic_page_size(magic, ptr);
-	debug("Free: Page %p (%ld pages)\n", ptr, npages);
-	while (npages--)
-	{
-		IFDEBUG(
-		void* page = (u8*)ptr + npages * PAGE_SIZE;
-		pageinfo* info = get_pageinfo(page);
-		assert(IS_MAGIC_PAGE(info) && (info == MAGIC_PAGE_FIRST || info == MAGIC_PAGE_FOLLO));
-		)
-		free_page((u8*)ptr + npages * PAGE_SIZE);
-	}
-}
 
 //#define FREE_IS_NOT_FREE
 
