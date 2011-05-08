@@ -48,15 +48,16 @@ typedef uint64_t u64;
 #endif
 #define printf xprintf
 
-#ifdef DEBUG
+//#define LOG_MMAP
+#if defined(DEBUG) || defined(LOG_MMAP)
 static void* mmap_wrap(void* ptr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-	debug("mmap(%lu)\n", (unsigned long)length);
+	xprintf("mmap(%lu)\n", (unsigned long)length);
 	return mmap(ptr, length, prot, flags, fd, offset);
 }
 static int munmap_wrap(void* ptr, size_t length)
 {
-	debug("munmap(%lu)\n", (unsigned long)length);
+	xprintf("munmap(%lu)\n", (unsigned long)length);
 	return munmap(ptr, length);
 }
 #define munmap munmap_wrap
