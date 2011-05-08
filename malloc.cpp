@@ -533,7 +533,9 @@ static void add_to_freelist(void* page)
 	set_pageinfo(page, MAGIC_PAGE_FREE);
 }
 
-static const size_t SPARE_PAGES = 50;
+// 4MB is not a lot to keep laying around. But there should rather be some kind
+// of hysteresis mechanism.
+static const size_t SPARE_PAGES = 1024;
 
 static void free_page(void* page)
 {
