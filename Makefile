@@ -17,7 +17,12 @@ DEPFILES = malloc.D
 
 TARGETS = malloc.so malloc_debug.so test debugtest
 
+ifeq ($(filter clean,$(MAKECMDGOALS)),clean)
+all: | clean
+	@$(MAKE) --no-print-directory $(TARGETS)
+else
 all: $(TARGETS)
+endif
 
 HUSH_DEP = @echo " [DEP]\t$<";
 HUSH_CXX = @echo " [CXX]\t$@";
