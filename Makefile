@@ -27,6 +27,8 @@ endif
 HUSH_DEP = @echo " [DEP]\t$<";
 HUSH_CXX = @echo " [CXX]\t$@";
 HUSH_CXX_DEBUG = @echo " [CXX]\t$@ [DEBUG]";
+HUSH_RM = @x_rm() { echo " [RM]\t$$@"; rm -f "$$@"; };
+RM = x_rm
 
 %.D: %.cpp
 	$(HUSH_DEP) $(CXX) $(CXXFLAGS) $(DEPFLAGS) -MM -o $@ $<
@@ -44,6 +46,6 @@ debugtest: malloc.cpp
 	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS) -DTEST
 
 clean:
-	rm -f $(TARGETS) $(DEPFILES)
+	$(HUSH_RM) $(RM) $(TARGETS) $(DEPFILES)
 
 -include $(DEPFILES)
