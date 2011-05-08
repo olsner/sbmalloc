@@ -67,8 +67,9 @@ static void* realloc_unlocked(void* ptr, size_t new_size);
 #endif
 
 #ifdef THREAD_SAFE
-static void init_lock();
 #if defined(USE_SPINLOCKS)
+#define NEED_INIT_LOCK
+static void init_lock();
 struct mallock
 {
 	pthread_spinlock_t spinlock;
@@ -114,6 +115,7 @@ struct mallock
 #error Choose your poison
 #endif
 static mallock g_lock;
+#ifdef NEED_INIT_LOCK
 pthread_once_t mallock_init = PTHREAD_ONCE_INIT;
 static void init_lock_cb()
 {
@@ -123,6 +125,7 @@ void init_lock()
 {
 	pthread_once(&mallock_init, init_lock_cb);
 }
+#endif
 #endif
 
 class scopelock
@@ -696,6 +699,8 @@ static void dump_pages()
 	assert(!unknown_magic);
 }
 
+#undef COMPACT_PAGEINFO
+#ifdef COMPACT_PAGEINFO
 static void compact_pageinfo()
 {
 	intptr_t first_non_zero = -1;
@@ -727,10 +732,10 @@ static void compact_pageinfo()
 		return;
 	}
 
-	size_t tail_unused = last_non_zero >= 0 ? g_n_pages - last_non_zero : 0;
+	intptr_t tail_unused = last_non_zero >= 0 ? g_n_pages - last_non_zero : 0;
 	debug("Could save %ld + %ld pagetable entries\n", first_non_zero, tail_unused);
 
-	size_t entries_per_page = PAGE_SIZE / sizeof(pageinfo*);
+	intptr_t entries_per_page = PAGE_SIZE / sizeof(pageinfo*);
 	if (tail_unused >= entries_per_page)
 	{
 		size_t remove_entries = (tail_unused / entries_per_page) * entries_per_page;
@@ -751,6 +756,7 @@ static void compact_pageinfo()
 		//dump_pages();
 	}
 }
+#endif
 
 static void set_pageinfo(void* page, pageinfo* info)
 {
@@ -762,18 +768,20 @@ static void set_pageinfo(void* page, pageinfo* info)
 
 	debug("set_pageinfo: Page %p info %p\n", page, info);
 
+#ifdef DEBUG
 	uintptr_t old_page = g_first_page;
 	pageinfo* old_pageinfo = NULL;
 	if (g_n_pages)
 	{
 		for (size_t i = 0; i < g_n_pages; i++, old_page += 4096)
 		{
-			if (old_pageinfo = g_pages[i])
+			if ((old_pageinfo = g_pages[i]))
 			{
 				break;
 			}
 		}
 	}
+#endif
 
 	if (unlikely((uintptr_t)offset >= g_n_pages || offset < 0))
 	{
@@ -783,7 +791,7 @@ static void set_pageinfo(void* page, pageinfo* info)
 		pageinfo** new_pages = (pageinfo**)mmap(NULL, required, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 		assert(new_pages != MAP_FAILED);
 
-		uintptr_t old_first_page = g_first_page;
+		IFDEBUG(uintptr_t old_first_page = g_first_page;)
 		if (offset < 0)
 		{
 			size_t adjustment = (-offset * sizeof(pageinfo*) + PAGE_SIZE) & ~(PAGE_SIZE - 1);
@@ -798,12 +806,14 @@ static void set_pageinfo(void* page, pageinfo* info)
 		munmap(g_pages, g_n_pages * sizeof(pageinfo*));
 		debug("Moved page table from %p (%ld) %p to %p (%ld) %p\n", g_pages, g_n_pages, old_first_page, new_pages, required / sizeof(pageinfo*), g_first_page);
 
+#ifdef DEBUG
 		if (g_n_pages)
 		{
-			intptr_t new_offset = ((intptr_t)old_page - (intptr_t)g_first_page) >> PAGE_SHIFT;
+			uintptr_t new_offset = ((intptr_t)old_page - (intptr_t)g_first_page) >> PAGE_SHIFT;
 			assert(new_offset < required / sizeof(pageinfo*) && new_offset >= 0);
 			assert(new_pages[new_offset] == old_pageinfo);
 		}
+#endif
 
 		g_pages = new_pages;
 		g_n_pages = required / sizeof(pageinfo*);
@@ -812,7 +822,9 @@ static void set_pageinfo(void* page, pageinfo* info)
 	g_pages[offset] = info;
 	debug("set_pageinfo: Page %p info %p\n", page, g_pages[offset]);
 
-	//compact_pageinfo();
+#ifdef COMPACT_PAGEINFO
+	compact_pageinfo();
+#endif
 }
 
 static pageinfo* new_chunkpage(size_t size)
