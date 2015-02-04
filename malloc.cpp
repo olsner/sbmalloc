@@ -766,6 +766,7 @@ static void dump_pages()
 	printf("%ld bytes covered by page table (%ld bytes)\n", g_n_pages * PAGE_SIZE, g_n_pages * sizeof(pageinfo*));
 	fflush(stdout);
 	assert(!corrupt);
+	(void)corrupt; // Silence unused-var warning
 	assert(freelist_pages == g_n_free_pages);
 	assert(!unknown_magic);
 }
