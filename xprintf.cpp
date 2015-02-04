@@ -19,6 +19,9 @@
 #define XPRINTF_LINKAGE
 #endif
 
+XPRINTF_LINKAGE void xfprintf(FILE* fp, const char* fmt, ...);
+XPRINTF_LINKAGE void xvfprintf(FILE* file, const char* fmt, va_list ap);
+
 static void format_num(FILE* file, int width, bool leading_zero, bool sign, int base, bool show_base, uintptr_t num)
 {
 	if (sign && (intptr_t)num < 0)
@@ -64,7 +67,7 @@ static const char* read_width(const char* fmt, int* width)
 	return endptr;
 }
 
-XPRINTF_LINKAGE void xvfprintf(FILE* file, const char* fmt, va_list ap)
+void xvfprintf(FILE* file, const char* fmt, va_list ap)
 {
 	flockfile(file);
 	while (*fmt)
@@ -166,7 +169,7 @@ XPRINTF_LINKAGE void xvfprintf(FILE* file, const char* fmt, va_list ap)
 	/* Should return the number of characters output, or -1 on error. */
 }
 
-XPRINTF_LINKAGE void xfprintf(FILE* fp, const char* fmt, ...)
+void xfprintf(FILE* fp, const char* fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
