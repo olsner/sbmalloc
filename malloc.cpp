@@ -21,11 +21,16 @@
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 
-static void panic(const char* fmt, ...) __attribute__((noreturn));
+static void panic1();
+static void panic2() __attribute__((noreturn));
 static void dump_pages();
 #define assert_failed(e, file, line) panic("Assertion failed! %s:%d: %s", file, line, e)
 #define xassert(e) if (likely(e)); else assert_failed(#e, __FILE__, __LINE__)
 #define xassert_abort(e) if (likely(e)); else abort()
+#define panic(fmt, ...) do { \
+	panic1(); \
+	xfprintf(stderr, "PANIC: " fmt "\n", ## __VA_ARGS__); \
+	panic2(); } while (0);
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -327,7 +332,7 @@ static size_t get_magic_page_size(pageinfo* info, void* ptr);
 #define LAST_MAGIC_PAGE ((pageinfo*)5)
 #define IS_MAGIC_PAGE(page) ((page) && ((page) < LAST_MAGIC_PAGE))
 
-static void panic(const char* fmt, ...)
+void panic1()
 {
 	static bool panicked = false;
 	if (panicked)
@@ -336,15 +341,10 @@ static void panic(const char* fmt, ...)
 		abort();
 	}
 	panicked++;
+}
 
-	va_list ap;
-	va_start(ap, fmt);
-	flockfile(stderr);
-	xfprintf(stderr, "PANIC: ");
-	xvfprintf(stderr, fmt, ap);
-	fputc('\n', stderr);
-	funlockfile(stderr);
-	va_end(ap);
+void panic2()
+{
 	dump_pages();
 	fflush(stdout);
 	fflush(stderr);
