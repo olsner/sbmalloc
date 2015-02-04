@@ -407,13 +407,13 @@ static void xvfprintf(FILE* file, const char* fmt, va_list ap)
 			case 'u':
 				sign = false;
 			case 'd':
-#define format_num_type(type) format_num(file, width, leading_zero, sign, base, show_base, va_arg(ap, type))
+#define format_num_type(atype, ntype) format_num(file, width, leading_zero, sign, base, show_base, (ntype)va_arg(ap, atype))
 				if (is_long)
-					sign ? format_num_type(long) : format_num_type(unsigned long);
+					sign ? format_num_type(long, intptr_t) : format_num_type(unsigned long, uintptr_t);
 				else if (is_size)
-					format_num_type(size_t);
+					format_num_type(size_t, uintptr_t);
 				else
-					format_num_type(int);
+					format_num_type(int, intptr_t);
 				break;
 			case 'p':
 				format_num(file, 0, false, false, 16, true, (uintptr_t)va_arg(ap, void*));
