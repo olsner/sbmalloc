@@ -15,7 +15,7 @@ DEPFLAGS = -MP -MT $@ $(addprefix -MT ,$(TARGETS))
 
 DEPFILES = malloc.D
 
-TARGETS = malloc.so malloc_debug.so test debugtest
+TARGETS = malloc.so malloc_debug.so test debugtest printf_test
 
 ifeq ($(filter clean,$(MAKECMDGOALS)),clean)
 all: | clean
@@ -44,6 +44,9 @@ test: malloc.cpp
 
 debugtest: malloc.cpp
 	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS) -DTEST
+
+printf_test: xprintf.cpp
+	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS) -DXPRINTF_TEST
 
 clean:
 	$(HUSH_RM) $(RM) $(TARGETS) $(DEPFILES)

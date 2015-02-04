@@ -21,7 +21,6 @@
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 
-static void xprintf(const char* fmt, ...);
 static void panic(const char* fmt, ...) __attribute__((noreturn));
 static void dump_pages();
 #define assert_failed(e, file, line) panic("Assertion failed! %s:%d: %s", file, line, e)
@@ -38,6 +37,12 @@ typedef uint64_t u64;
 #else
 #define assert(...) (void)0
 #endif
+
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
+#define STATIC_XPRINTF
+#include "xprintf.cpp"
 
 #ifdef DEBUG
 #define debug xprintf
@@ -67,9 +72,6 @@ static int munmap_wrap(void* ptr, size_t length)
 static void free_unlocked(void* ptr);
 static void* malloc_unlocked(size_t size);
 static void* realloc_unlocked(void* ptr, size_t new_size);
-
-#define likely(x) __builtin_expect(!!(x), 1)
-#define unlikely(x) __builtin_expect(!!(x), 0)
 
 #ifdef DEBUG
 #define MALLOC_CLEAR_MEM 0xcc
@@ -324,158 +326,6 @@ static size_t get_magic_page_size(pageinfo* info, void* ptr);
 #define MAGIC_PAGE_FREE ((pageinfo*)4)
 #define LAST_MAGIC_PAGE ((pageinfo*)5)
 #define IS_MAGIC_PAGE(page) ((page) && ((page) < LAST_MAGIC_PAGE))
-
-template <typename T>
-void format_num(FILE* file, int width, bool leading_zero, bool sign, int base, bool show_base, T num)
-{
-	if (sign && num < 0)
-	{
-		// FIXME Doesn't work for the most negative value of T :/
-		num = -num;
-		fputc_unlocked('-', file);
-	}
-	if (show_base)
-	{
-		assert(base == 16);
-		fputc_unlocked('0', file);
-		fputc_unlocked('x', file);
-	}
-	char buf[32];
-	memset(buf, 0, sizeof(buf));
-	size_t len = 0;
-	do
-	{
-		buf[len++] = "0123456789abcdef"[num % base];
-		num /= base;
-	}
-	while (num);
-	if (width)
-	{
-		int c = leading_zero ? '0' : ' ';
-		while (len < (size_t)width--)
-		{
-			fputc_unlocked(c, file);
-		}
-	}
-	while (len--)
-	{
-		fputc_unlocked(buf[len], file);
-	}
-}
-
-const char* read_width(const char* fmt, int* width)
-{
-	errno = 0;
-	char* endptr = NULL;
-	*width = strtol(fmt, &endptr, 10);
-	assert(!errno);
-	return endptr;
-}
-
-static void xvfprintf(FILE* file, const char* fmt, va_list ap)
-{
-	flockfile(file);
-	while (*fmt)
-	{
-		const char* nextformat = strchr(fmt, '%');
-		if (!nextformat)
-		{
-			fwrite_unlocked(fmt, 1, strlen(fmt), file);
-			break;
-		}
-		else
-		{
-			fwrite_unlocked(fmt, 1, nextformat - fmt, file);
-			fmt = nextformat + 1;
-		}
-		bool is_long = false;
-		bool is_size = false;
-		bool leading_zero = false;
-		bool sign = true;
-		bool show_base = false;
-		int width = 0;
-		//int before_point = 0;
-		int base = 10;
-		for (;;)
-		{
-			switch (*fmt++)
-			{
-			case '%':
-				fputc_unlocked('%', file);
-				break;
-			case 's':
-			{
-				const char* arg = va_arg(ap, const char*);
-				if (arg)
-					fwrite_unlocked(arg, 1, strlen(arg), file);
-				else
-					fwrite_unlocked("(null)", 1, sizeof("(null)")-1, file);
-				break;
-			}
-			case 'x':
-				base = 16;
-			case 'u':
-				sign = false;
-			case 'd':
-#define format_num_type(atype, ntype) format_num(file, width, leading_zero, sign, base, show_base, (ntype)va_arg(ap, atype))
-				if (is_long)
-					sign ? format_num_type(long, intptr_t) : format_num_type(unsigned long, uintptr_t);
-				else if (is_size)
-					format_num_type(size_t, uintptr_t);
-				else
-					format_num_type(int, intptr_t);
-				break;
-			case 'p':
-				format_num(file, 0, false, false, 16, true, (uintptr_t)va_arg(ap, void*));
-				break;
-			case 'l':
-				is_long = true;
-				continue;
-			case 'z':
-				is_size = true;
-				continue;
-			case '#':
-				show_base = true;
-				continue;
-			case '.':
-				//before_point = width;
-				width = 0;
-				continue;
-			case '0':
-				leading_zero = true;
-				fmt = read_width(fmt, &width);
-				continue;
-			default:
-				if (isdigit(fmt[-1]))
-				{
-					fmt = read_width(fmt - 1, &width);
-					continue;
-				}
-				abort();
-			}
-			break;
-		}
-	}
-	funlockfile(file);
-	fflush(file);
-	fflush(stderr); // HACK
-}
-
-static void xfprintf(FILE* fp, const char* fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	xvfprintf(fp, fmt, ap);
-	va_end(ap);
-}
-
-static void xprintf(const char* fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	xvfprintf(stdout, fmt, ap);
-	va_end(ap);
-}
 
 static void panic(const char* fmt, ...)
 {
