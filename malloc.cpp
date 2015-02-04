@@ -170,10 +170,20 @@ static pthread_t get_owner();
 #define SCOPELOCK(e) xassert_abort(pthread_equal(get_owner(), pthread_self()))
 #endif
 
+#if 1
 #include "splay_tree.cpp"
 
-typedef splay_node chunkpage_node;
-typedef splay_tree<chunkpage_node> chunkpage_heap;
+#define NODE splay_node
+#define TREE(node) splay_tree<node>
+#else
+#include "pairing_heap.cpp"
+
+#define NODE pairing_ptr_node
+#define TREE(node) pairing_ptr_heap
+#endif
+
+typedef NODE chunkpage_node;
+typedef TREE(chunkpage_node) chunkpage_heap;
 
 struct pageinfo
 {
@@ -292,8 +302,8 @@ static void page_free_chunk(pageinfo* page, void* ptr)
 
 #define N_SIZES (128/16+4)
 
-typedef splay_node freepage_node;
-typedef splay_tree<freepage_node> freepage_heap;
+typedef NODE freepage_node;
+typedef TREE(freepage_node) freepage_heap;
 
 static freepage_heap g_free_pages;
 static size_t g_n_free_pages;

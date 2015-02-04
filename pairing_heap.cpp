@@ -20,6 +20,11 @@ struct pairing_ptr_heap
 
 	void delete_min()
 	{
+		delete_min(min);
+	}
+
+	static void delete_min(Tp& min)
+	{
 		assert(!min->right);
 		Tp l = min->down;
 		min->down = NULL;
@@ -81,6 +86,33 @@ struct pairing_ptr_heap
 		//l->right = NULL; // we know it's already null
 		return l;
 	}
+
+	void remove(Tp n)
+	{
+		remove(min, n);
+	}
+
+	static bool remove(Tp& p, Tp needle)
+	{
+		if (p == needle) {
+			Tp r = p->right;
+			p->right = NULL;
+			delete_min(p);
+			while (r) {
+				Tp rr = r->right;
+				r->right = NULL;
+				p = merge(p, r);
+				r = rr;
+			}
+			return true;
+		} else if (p->down && remove(p->down, needle)) {
+			return true;
+		} else if (p->right && remove(p->right, needle)) {
+			return true;
+		} else {
+			return false;
+		}
+	}
 };
 static pairing_ptr_node* get_min(const pairing_ptr_heap& p)
 {
@@ -94,4 +126,8 @@ static void delete_min(pairing_ptr_heap& p)
 static void insert(pairing_ptr_heap& heap, pairing_ptr_node* r)
 {
 	heap.insert(r);
+}
+static void remove(pairing_ptr_heap& heap, pairing_ptr_node* r)
+{
+	heap.remove(r);
 }
