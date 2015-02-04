@@ -51,6 +51,7 @@ debugtest: malloc.cpp
 
 printf_test: xprintf.cpp
 	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS) -DXPRINTF_TEST
+	@./printf_test
 
 clean:
 	$(HUSH_RM) $(RM) $(TARGETS) $(DEPFILES)
