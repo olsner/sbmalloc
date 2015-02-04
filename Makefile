@@ -20,10 +20,11 @@ LDFLAGS = -lrt -ldl -lpthread -Wl,-Bsymbolic -Wl,--gc-sections
 LDSOFLAGS = $(LDFLAGS) -Wl,-no-undefined -Wl,-Bsymbolic
 GHCFLAGS = -O2 -fvia-c
 DEPFLAGS = -MP -MT $@ $(addprefix -MT ,$(TARGETS))
+STRIPFLAGS = --strip-unneeded
 
 DEPFILES = malloc.D
 
-TARGETS = malloc.so malloc_debug.so test debugtest printf_test
+TARGETS = malloc.so malloc_debug.so malloc.stripped.so test debugtest printf_test
 
 ifeq ($(filter clean,$(MAKECMDGOALS)),clean)
 all: MAKEFLAGS := $(filter-out -j%, $(MAKEFLAGS))
@@ -33,11 +34,13 @@ else
 all: $(TARGETS)
 endif
 
+HUSH_STRIP = @echo " [STRIP]\t$@";
 HUSH_DEP = @echo " [DEP]\t$<";
 HUSH_CXX = @echo " [CXX]\t$@";
 HUSH_CXX_DEBUG = @echo " [CXX]\t$@ [DEBUG]";
 HUSH_RM = @x_rm() { echo " [RM]\t$$@"; rm -f "$$@"; };
 RM = x_rm
+STRIP ?= strip
 
 %.D: %.cpp
 	$(HUSH_DEP) $(CXX) $(CXXFLAGS) $(DEPFLAGS) -MM -o $@ $<
@@ -57,6 +60,10 @@ debugtest: malloc.cpp
 printf_test: xprintf.cpp
 	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS) -DXPRINTF_TEST
 	@./printf_test
+
+%.stripped.so: %.so
+	$(HUSH_STRIP) $(STRIP) $(STRIPFLAGS) -o $@ $<
+	@echo " [STRIP]\t$@: `stat -c%s $@` bytes"
 
 clean:
 	$(HUSH_RM) $(RM) $(TARGETS) $(DEPFILES)

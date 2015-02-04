@@ -2,5 +2,4 @@ test
 debugtest
 printf_test
 *.D
-malloc.so
-malloc_debug.so
+*.so
