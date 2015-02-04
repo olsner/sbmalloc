@@ -90,6 +90,7 @@ XPRINTF_LINKAGE void xvfprintf(FILE* file, const char* fmt, va_list ap)
 		int base = 10;
 		for (;;)
 		{
+#define ARG(t) va_arg(ap, t)
 			switch (*fmt++)
 			{
 			case '%':
@@ -97,25 +98,36 @@ XPRINTF_LINKAGE void xvfprintf(FILE* file, const char* fmt, va_list ap)
 				break;
 			case 's':
 			{
-				const char* arg = va_arg(ap, const char*);
+				const char* arg = ARG(const char*);
 				if (arg)
 					fwrite_unlocked(arg, 1, strlen(arg), file);
 				else
 					fwrite_unlocked("(null)", 1, sizeof("(null)")-1, file);
 				break;
 			}
+			// 'o' is also unsigned, somewhat surprisingly
+			case 'o':
+				base = 8;
+				if (false)
 			case 'x':
 				base = 16;
 			case 'u':
 				sign = false;
 			case 'd':
-#define format_num_type(atype, ntype) format_num(file, width, leading_zero, sign, base, show_base, (ntype)va_arg(ap, atype))
-				if (is_long)
-					sign ? format_num_type(long, intptr_t) : format_num_type(unsigned long, uintptr_t);
-				else if (is_size)
-					format_num_type(size_t, uintptr_t);
-				else
-					format_num_type(int, intptr_t);
+#if 0
+			case 'i':
+#endif
+				format_num(file, width, leading_zero, sign, base, show_base,
+					is_long ?
+						(sign ? ARG(long) : ARG(unsigned long))
+					: is_size ?
+						(sign ? ARG(size_t) : ARG(ssize_t))
+					:
+						// Careful here: the int must be sign-extended to the
+						// same width type that format_num takes (at least).
+						// x?int:unsigned :: unsigned, which may be narrower
+						// than that, causing only partial sign extension.
+						(sign ? (intptr_t)ARG(int) : ARG(unsigned)));
 				break;
 			case 'p':
 				format_num(file, 0, false, false, 16, true, (uintptr_t)va_arg(ap, void*));
@@ -143,7 +155,7 @@ XPRINTF_LINKAGE void xvfprintf(FILE* file, const char* fmt, va_list ap)
 					fmt = read_width(fmt - 1, &width);
 					continue;
 				}
-				abort();
+				return; /* -1 */
 			}
 			break;
 		}
@@ -151,6 +163,7 @@ XPRINTF_LINKAGE void xvfprintf(FILE* file, const char* fmt, va_list ap)
 	funlockfile(file);
 	fflush(file);
 	fflush(stderr); // HACK
+	/* Should return the number of characters output, or -1 on error. */
 }
 
 XPRINTF_LINKAGE void xfprintf(FILE* fp, const char* fmt, ...)
@@ -178,10 +191,15 @@ XPRINTF_LINKAGE void xprintf(const char* fmt, ...)
 		xfprintf(fp, fmt, ## __VA_ARGS__); \
 		fflush(fp); \
 		fclose(fp); \
-		if (strcmp(memstream_buffer, result) != 0) { \
+		char tmp[256] = {0}; \
+		snprintf(tmp, sizeof(tmp), fmt, ## __VA_ARGS__); \
+		if (strcmp(memstream_buffer, result) != 0 \
+			|| strcmp(tmp, result) != 0) { \
 			fprintf(stderr, "%s (" fmt "):\n\tactual   \"%s\"\n\texpected \"%s\"\n", \
 				fmt, ## __VA_ARGS__, memstream_buffer, result); \
-			res++; \
+			fail++; \
+		} else { \
+			pass++; \
 		} \
 	} while (0)
 
@@ -189,12 +207,23 @@ int main()
 {
 	char* memstream_buffer = NULL;
 	size_t memstream_size = 0;
-	int res = 0;
+	int fail = 0, pass = 0;
 	test("-2147483648", "%d", INT_MIN);
-	test("-9223372036854775808", "%ld", LONG_MIN);
-	if (res) {
-		fprintf(stderr, "%d failed test cases\n", res);
+	test("0x80000000", "%#x", unsigned(INT_MIN));
+	test("80000000", "%x", unsigned(INT_MIN));
+	test("20000000000", "%o", unsigned(INT_MIN));
+	if (sizeof(long) == 8) {
+		test("-9223372036854775808", "%ld", LONG_MIN);
+		test("9223372036854775808", "%lu", 1 + (unsigned long)LONG_MAX);
+	} else {
+		test("-2147483648", "%ld", LONG_MIN);
+		test("2147483648", "%lu", 1 + (unsigned long)LONG_MAX);
 	}
-	return res;
+	if (fail) {
+		fprintf(stderr, "FAIL: %d test cases failed\n", fail);
+	} else {
+		fprintf(stdout, "OK: %d test cases passed\n", pass);
+	}
+	return fail;
 }
 #endif
