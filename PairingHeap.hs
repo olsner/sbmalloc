@@ -53,6 +53,13 @@ mergePairs (T x hs1 (T y hs2 hs)) =
 
 deleteMin (T _ hs E) = mergePairs hs
 
+delete x = go
+  where
+    go E = E
+    go (T y d r)
+        | x == y = merge d r
+        | otherwise = T y (go d) (go r)
+
 heapsort xs = unfoldr f (insertList xs E)
   where
     f E = Nothing
@@ -102,9 +109,18 @@ prop_deleteMin_list_second (NonEmpty ys) = not (null (tail ys)) ==>
     x'' = deleteMin x'
     ys' = sort ys
 
+prop_insert1_delete_proper x y = isProperRoot x ==> isProperRoot (delete y (insert y x))
+prop_insert_delete_proper x (NonEmpty ys) = isProperRoot x ==> isProperRoot (deleteAll ys (insertAll ys x))
+deleteAll [] x = x
+deleteAll (y:ys) x = deleteAll ys (delete y x)
+insertAll [] x = x
+insertAll (y:ys) x = insertAll ys (insert y x)
+
 prop_heapsort xs = heapsort (xs :: [Int]) == sort xs
 
 main = do
+    deepCheck prop_insert1_delete_proper
+    deepCheck prop_insert_delete_proper
     deepCheck prop_merge_keeps_proper
     deepCheck prop_merge_size
     deepCheck prop_insert_keeps_proper
