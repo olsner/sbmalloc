@@ -1,6 +1,8 @@
+ifeq ($(filter -j%, $(MAKEFLAGS)),)
 NCPU := $(shell grep -c ^processor /proc/cpuinfo)
 J ?= $(NCPU)
-MAKEFLAGS = -j$J
+MAKEFLAGS += -j$J
+endif
 
 .PHONY: all clean
 
@@ -22,6 +24,7 @@ DEPFILES = malloc.D
 TARGETS = malloc.so malloc_debug.so test debugtest printf_test
 
 ifeq ($(filter clean,$(MAKECMDGOALS)),clean)
+all: MAKEFLAGS := $(filter-out -j%, $(MAKEFLAGS))
 all: | clean
 	@$(MAKE) --no-print-directory $(TARGETS)
 else
