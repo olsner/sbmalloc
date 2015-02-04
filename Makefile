@@ -10,11 +10,13 @@ CXXFLAGS = \
 	-fpic -DPIC -fvisibility=hidden -fvisibility-inlines-hidden \
 	-fno-rtti -fno-exceptions -fomit-frame-pointer \
 	-Wall -g
-FASTCXXFLAGS = $(CXXFLAGS) -Os -march=native
+FASTCXXFLAGS = $(CXXFLAGS) \
+	-Os -march=native \
+	-fno-unwind-tables -fno-asynchronous-unwind-tables
 DEBUGCXXFLAGS = $(CXXFLAGS) \
 	-DDEBUG \
 	-ftrapv -funwind-tables
-LDFLAGS = -lrt -ldl -lpthread -Wl,-Bsymbolic
+LDFLAGS = -lrt -ldl -lpthread -Wl,-Bsymbolic -Wl,--gc-sections
 LDSOFLAGS = $(LDFLAGS) -Wl,-no-undefined -Wl,-Bsymbolic
 GHCFLAGS = -O2 -fvia-c
 DEPFLAGS = -MP -MT $@ $(addprefix -MT ,$(TARGETS))
