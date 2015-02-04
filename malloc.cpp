@@ -394,7 +394,7 @@ static void xvfprintf(FILE* file, const char* fmt, va_list ap)
 		bool sign = true;
 		bool show_base = false;
 		int width = 0;
-		int before_point = 0;
+		//int before_point = 0;
 		int base = 10;
 		for (;;)
 		{
@@ -438,7 +438,7 @@ static void xvfprintf(FILE* file, const char* fmt, va_list ap)
 				show_base = true;
 				continue;
 			case '.':
-				before_point = width;
+				//before_point = width;
 				width = 0;
 				continue;
 			case '0':
