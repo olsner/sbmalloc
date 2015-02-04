@@ -4,7 +4,7 @@ CXXFLAGS = \
 	-fpic -DPIC -fvisibility=hidden -fvisibility-inlines-hidden \
 	-fno-rtti -fno-exceptions -fomit-frame-pointer \
 	-Wall -g
-FASTCXXFLAGS = $(CXXFLAGS) -O2 -march=native
+FASTCXXFLAGS = $(CXXFLAGS) -Os -march=native
 DEBUGCXXFLAGS = $(CXXFLAGS) \
 	-DDEBUG \
 	-ftrapv -funwind-tables
