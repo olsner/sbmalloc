@@ -1033,7 +1033,12 @@ void* malloc(size_t size)
 
 static int posix_memalign_unlocked(void** ret, size_t align, size_t size)
 {
-	// TODO Check that align is a power-of-two and larger than sizeof(void*)
+	*ret = NULL;
+
+	if (align & (align - 1)) // x is not a power of two
+	{
+		return EINVAL;
+	}
 
 	// Everything is 16-byte aligned in this malloc
 	if (align <= 16)
@@ -1046,7 +1051,6 @@ static int posix_memalign_unlocked(void** ret, size_t align, size_t size)
 	{
 		if (align % PAGE_SIZE)
 		{
-			*ret = 0;
 			return EINVAL;
 		}
 		xassert(align < 16*1024*1024);
@@ -1069,10 +1073,6 @@ static int posix_memalign_unlocked(void** ret, size_t align, size_t size)
 			// Unmap footer
 			munmap(used_end, allocated_end - used_end);
 			*ret = page;
-		}
-		else
-		{
-			*ret = NULL;
 		}
 	}
 	else
