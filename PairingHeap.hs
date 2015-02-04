@@ -102,4 +102,17 @@ prop_deleteMin_list_second (NonEmpty ys) = not (null (tail ys)) ==>
     x'' = deleteMin x'
     ys' = sort ys
 
-prop_heapsort xs = heapsort xs == sort xs
+prop_heapsort xs = heapsort (xs :: [Int]) == sort xs
+
+main = do
+    deepCheck prop_merge_keeps_proper
+    deepCheck prop_merge_size
+    deepCheck prop_insert_keeps_proper
+    deepCheck prop_insert_size
+    deepCheck prop_insert_min
+    deepCheck prop_insert_list_findMin
+    deepCheck prop_deleteMin_keeps_proper
+    deepCheck prop_deleteMin_size
+    deepCheck prop_deleteMin_insert_min
+    deepCheck prop_deleteMin_list_second
+    deepCheck prop_heapsort
