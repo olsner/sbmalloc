@@ -1,3 +1,7 @@
+NCPU := $(shell grep -c ^processor /proc/cpuinfo)
+J ?= $(NCPU)
+MAKEFLAGS = -j$J
+
 .PHONY: all clean
 
 CXXFLAGS = \
