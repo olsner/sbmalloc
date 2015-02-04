@@ -1,3 +1,5 @@
 test
 debugtest
 *.D
+malloc.so
+malloc_debug.so
