@@ -93,7 +93,7 @@ static void* realloc_unlocked(void* ptr, size_t new_size);
 #if defined(USE_SPINLOCKS)
 #define NEED_INIT_LOCK
 static void init_lock();
-struct mallock
+namespace mallock
 {
 	pthread_spinlock_t spinlock;
 
@@ -116,33 +116,32 @@ struct mallock
 	}
 };
 #elif defined(USE_MUTEX)
-static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-struct mallock
+namespace mallock
 {
+	static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
 	void init()
 	{
 	}
 	void lock()
 	{
-		int res = pthread_mutex_lock(&g_mutex);
+		int res = pthread_mutex_lock(&mutex);
 		xassert(res == 0);
 	}
 	void unlock()
 	{
-		int res = pthread_mutex_unlock(&g_mutex);
+		int res = pthread_mutex_unlock(&mutex);
 		xassert(res == 0);
 	}
 };
 #else
 #error Choose your poison
 #endif
-static mallock g_lock;
 #ifdef NEED_INIT_LOCK
 pthread_once_t mallock_init = PTHREAD_ONCE_INIT;
 static void init_lock_cb()
 {
-	g_lock.init();
+	mallock::init();
 }
 void init_lock()
 {
@@ -159,11 +158,11 @@ public:
 #ifdef THREAD_SAFE
 	scopelock()
 	{
-		g_lock.lock();
+		mallock::lock();
 	}
 	~scopelock()
 	{
-		g_lock.unlock();
+		mallock::unlock();
 	}
 #endif
 };
