@@ -69,3 +69,22 @@ clean:
 	$(HUSH_RM) $(RM) $(TARGETS) $(DEPFILES)
 
 -include $(DEPFILES)
+
+FUZZ_SRC = Fuzzer/FuzzerCrossOver.cpp Fuzzer/FuzzerDFSan.cpp Fuzzer/FuzzerDriver.cpp Fuzzer/FuzzerIO.cpp Fuzzer/FuzzerLoop.cpp Fuzzer/FuzzerMain.cpp Fuzzer/FuzzerMutate.cpp Fuzzer/FuzzerSanitizerOptions.cpp Fuzzer/FuzzerUtil.cpp
+FUZZ_OBJS = $(FUZZ_SRC:.cpp=.o)
+ASAN_FLAGS = -fsanitize=address -fsanitize-coverage=3
+CLANG ?= clang-3.6
+
+Fuzzer/%.o: Fuzzer/%.cpp
+	$(CLANG) -c -g -O2 -std=c++11 -o $@ $^
+
+libfuzzer.a: $(FUZZ_OBJS)
+	$(AR) cr $@ $^
+
+malloc_asan.o: malloc.cpp
+	$(CLANG) -c -g -O2 -std=c++11 $(ASAN_FLAGS) -o $@ $^
+
+fuzzer: fuzzer.cc libfuzzer.a malloc_asan.o
+	$(CLANG) -g -O2 -std=c++11 $(ASAN_FLAGS) -o $@ $^
+
+all: fuzzer
