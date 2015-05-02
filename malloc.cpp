@@ -257,7 +257,9 @@ typedef TREE(freepage_node) freepage_heap;
 
 static freepage_heap g_free_pages;
 static size_t g_n_free_pages;
-static size_t g_spare_pages_wanted = 1024;
+static size_t g_spare_pages_wanted;
+static size_t g_max_pages, g_added_pages, g_used_pages;
+
 static chunkpage_heap g_chunk_pages[N_SIZES];
 static uintptr_t g_first_page;
 static uintptr_t g_n_pages;
@@ -310,6 +312,15 @@ static size_t ix_size(size_t ix)
 	return ix < 8 ? 16 * (ix + 1) : (1 << ix);
 }
 
+static void add_used_pages(size_t n)
+{
+	g_used_pages += n;
+	if (g_used_pages > g_max_pages) {
+		assert((ssize_t)g_used_pages > 0);
+		g_max_pages = g_used_pages;
+	}
+}
+
 static void* get_page()
 {
 	void* ret = get_min(g_free_pages);
@@ -321,9 +332,11 @@ static void* get_page()
 	}
 	else
 	{
+		g_added_pages++;
 		debug("Free-list empty, allocating fresh page\n", ret);
 		ret = mmap(0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	}
+	add_used_pages(1);
 	debug("get_page: %p\n", ret);
 	return ret;
 }
@@ -335,6 +348,7 @@ static void add_to_freelist(void* page)
 	insert(g_free_pages, (freepage_node*)page);
 	//dump_heap(g_free_pages);
 	g_n_free_pages++;
+	g_used_pages--;
 	set_pageinfo(page, MAGIC_PAGE_FREE);
 }
 
@@ -352,25 +366,14 @@ static void free_magic_page(pageinfo* magic, void* ptr)
 	size_t npages = get_magic_page_size(magic, ptr);
 	size_t reusepages = 0;
 	debug("Free: Page %p (%ld pages)\n", ptr, npages);
-	if (g_n_free_pages < g_spare_pages_wanted)
-	{
-		reusepages = g_spare_pages_wanted - g_n_free_pages;
-		if (reusepages < npages)
-		{
-			npages -= reusepages;
-		}
-		else
-		{
-			reusepages = npages;
-			npages = 0;
-		}
-	}
+	reusepages = npages;
+	npages -= reusepages;
 	u8* page = (u8*)ptr;
 	while (reusepages--)
 	{
 		IFDEBUG(
 		pageinfo* info = get_pageinfo(page);
-		assert(IS_MAGIC_PAGE(info) && (info == MAGIC_PAGE_FIRST || info == MAGIC_PAGE_FOLLO));
+		assert(info == MAGIC_PAGE_FIRST || info == MAGIC_PAGE_FOLLO);
 		)
 		free_page(page);
 		page += PAGE_SIZE;
@@ -407,6 +410,7 @@ static void* get_pages(size_t n)
 	else
 	{
 		ret = mmap(0, n * PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+		add_used_pages(n);
 	}
 	debug("get_pages: %ld pages: %p\n", n, ret);
 	if (unlikely(ret == (void*)-1))
@@ -452,6 +456,7 @@ void dump_pages()
 	size_t pginfo_pages = 0;
 	size_t unknown_magic = 0;
 	size_t chunk_pages = 0;
+	size_t used_pages = 0;
 
 	pageinfo** pagep = g_pages;
 	pageinfo** end = pagep + g_n_pages;
@@ -470,7 +475,8 @@ void dump_pages()
 					pagep++;
 				size_t npages = 1 + pagep - first;
 				magic_pages += npages;
-				printf("%p: %ld page(s) large alloc\n", addr, npages);
+				used_pages += npages;
+				printf("%p: %zu page(s) large alloc\n", addr, npages);
 				addr += (npages - 1) * PAGE_SIZE;
 			}
 			else if (page == MAGIC_PAGE_FREE)
@@ -481,7 +487,7 @@ void dump_pages()
 					pagep++;
 					n++;
 				}
-				printf("%p: %ld page(s) free-list\n", addr, n);
+				printf("%p: %zu page(s) free-list\n", addr, n);
 				addr += (n - 1) *PAGE_SIZE;
 				freelist_pages += n;
 				free = true;
@@ -489,6 +495,7 @@ void dump_pages()
 			else if (page == MAGIC_PAGE_PGINFO)
 			{
 				pginfo_pages++;
+				used_pages++;
 				printf("%p: contains pageinfo\n", addr);
 			}
 			else
@@ -509,6 +516,7 @@ void dump_pages()
 
 			allocated += PAGE_SIZE;
 			used += page_allocated_space(page);
+			used_pages++;
 			chunk_pages++;
 		}
 		else
@@ -522,8 +530,8 @@ void dump_pages()
 	}
 	printf(":pmud egaP\n");
 	size_t p = allocated ? 10000 * used / allocated : 0;
-	printf("Used %lu of %lu (%d.%02d%%)\n", used, allocated, p / 100, p % 100);
-	printf("Pages: %zd freelist (%zd) %zd large allocs %zd pageinfo %zd chunkpages %zd unknown\n", freelist_pages, g_n_free_pages, magic_pages, pginfo_pages, chunk_pages, unknown_magic);
+	printf("Used %zu of %zu (%d.%02d%%)\n", used, allocated, p / 100, p % 100);
+	printf("Pages: %zu used (%zu) %zu freelist (%zu) %zu large allocs %zu pageinfo %zu chunkpages %zu unknown\n", used_pages, g_used_pages, freelist_pages, g_n_free_pages, magic_pages, pginfo_pages, chunk_pages, unknown_magic);
 	size_t total_pages = freelist_pages + magic_pages + pginfo_pages + chunk_pages;
 	printf( "last non-free page %p\n"
 			"first page         %p\n", last_non_free, g_first_page);
@@ -533,6 +541,7 @@ void dump_pages()
 	assert(!corrupt);
 	(void)corrupt; // Silence unused-var warning
 	assert(freelist_pages == g_n_free_pages);
+	assert(used == g_used_pages);
 	assert(!unknown_magic);
 }
 
@@ -1001,11 +1010,16 @@ static const size_t SPARE_PAGES = 1024;
 //    memory ready for next time the working set increases.
 int malloc_trim(size_t pad)
 {
-	size_t free_pages, spare_pages_wanted;
+	size_t free_pages, spare_pages_wanted, added_pages, used_pages, max_pages;
 	{
 		SCOPELOCK();
 		free_pages = g_n_free_pages;
 		spare_pages_wanted = g_spare_pages_wanted;
+		added_pages = g_added_pages;
+		max_pages = g_max_pages;
+		used_pages = g_used_pages;
+		g_added_pages = 0;
+		g_max_pages = g_used_pages;
 	}
 
 	if (!free_pages) {
@@ -1024,45 +1038,59 @@ int malloc_trim(size_t pad)
 	int trim_timer_interval = 1;
 	int pages_trimmed = 0;
 
-	debug("Trim: %zu free pages.\n", g_n_free_pages);
-	while (free_pages > spare_pages_wanted)
+	printf("Trim: %zu free pages, %zu spare wanted.\n",
+			free_pages, spare_pages_wanted);
+	printf("Trim: %zu added, %zu used now, %zd max since last\n",
+			added_pages, used_pages, max_pages);
+
+	// Adjust spare_pages_wanted upwards if we had added_pages
+	// Adjust spare_pages_wanted downwards if max_pages is less than used_pages
+
+	size_t spare_pages_now = (free_pages + spare_pages_wanted) >> 1;
+	printf("Trim: Aiming for %zu spares (freeing %zu).\n",
+			spare_pages_now, free_pages - spare_pages_now);
+	while (free_pages > spare_pages_now)
 	{
 		u8* block_start;
 		u8* block_end;
 		{
-		SCOPELOCK();
+			SCOPELOCK();
+			// Might have changed if another free happened.
+			free_pages = g_n_free_pages;
 
-		u8* last_page = (u8*)get_max(g_free_pages);
-		block_end = last_page + PAGE_SIZE;
+			u8* last_page = (u8*)get_max(g_free_pages);
+			block_end = last_page + PAGE_SIZE;
 
-		do
-		{
-			remove(g_free_pages, (freepage_node*)last_page);
-			g_n_free_pages--;
-			set_pageinfo(last_page, 0);
-			pages_trimmed++;
+			do
+			{
+				remove(g_free_pages, (freepage_node*)last_page);
+				free_pages--;
+				set_pageinfo(last_page, 0);
+				pages_trimmed++;
 
-			block_start = last_page;
-			last_page = (u8*)get_max(g_free_pages);
-		}
-		while (last_page + 4096 == block_start);
-	
-		free_pages = g_n_free_pages;
-		spare_pages_wanted = g_spare_pages_wanted;
+				block_start = last_page;
+				last_page = (u8*)get_max(g_free_pages);
+			}
+			while (last_page + 4096 == block_start);
+
+			g_n_free_pages = free_pages;
 		}
 		// End of lock scope
+		printf("Trim: Freeing %zu pages.\n", (block_end - block_start) / PAGE_SIZE);
 		munmap(block_start, block_end - block_start);
 	}
 
 	set_timer(trim_timer_interval);
-	return 0;
+	return pages_trimmed;
 }
 
-static volatile sig_atomic_t timer_is_scheduled;
+static volatile sig_atomic_t timer_is_scheduled = 0;
 static void timer_function(union sigval)
 {
 	timer_is_scheduled = false;
-	malloc_trim(0);
+	xprintf("Trim: timer triggered\n");
+	int trimmed = malloc_trim(0);
+	xprintf("Trim: %d pages trimmed\n", trimmed);
 }
 
 static void init_timer() __attribute__((constructor));
@@ -1077,6 +1105,7 @@ static void init_timer()
 		perror("malloc timer_create");
 		exit(1);
 	}
+	set_timer(1);
 }
 // Only has an effect if the timer is previously unscheuled.
 static void set_timer(int sec)
@@ -1085,12 +1114,14 @@ static void set_timer(int sec)
 		return;
 	}
 	// TODO Set these so that all malloc timers (at the same interval) sync up.
-	itimerspec timerspec = { { sec, 0 }, { 0, 0 } };
+	itimerspec timerspec;
+	memset(&timerspec, 0, sizeof(timerspec));
+	timerspec.it_value.tv_sec = sec;
 	int res = timer_settime(g_timerid, 0 /* flags */, &timerspec, NULL);
 	if (res != 0) {
 		perror("timer_settime");
 	}
-	timer_is_scheduled = 1;
+	timer_is_scheduled = true;
 }
 
 #if defined(DEBUG) || defined(TEST)
