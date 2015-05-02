@@ -24,7 +24,8 @@ STRIPFLAGS = --strip-unneeded
 
 DEPFILES = malloc.D
 
-TARGETS = malloc.so malloc_debug.so malloc.stripped.so test debugtest printf_test
+TARGETS = malloc.so malloc_debug.so malloc.stripped.so malloc_test.so
+TARGETS += test debugtest printf_test
 
 ifeq ($(filter clean,$(MAKECMDGOALS)),clean)
 all: MAKEFLAGS := $(filter-out -j%, $(MAKEFLAGS))
@@ -51,11 +52,14 @@ malloc.so: malloc.cpp
 malloc_debug.so: malloc.cpp
 	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -shared -o $@ $< $(LDSOFLAGS)
 
+malloc_test.so: malloc.cpp
+	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -shared -o $@ $< $(LDSOFLAGS) -DTEST
+
 test: test.cpp
-	$(HUSH_CXX) $(CXX) $(FASTCXXFLAGS) -o $@ $< $(LDFLAGS) -DTEST
+	$(HUSH_CXX) $(CXX) $(FASTCXXFLAGS) -o $@ $< $(LDFLAGS)
 
 debugtest: test.cpp
-	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS) -DTEST
+	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS)
 
 printf_test: xprintf.cpp
 	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS) -DXPRINTF_TEST
