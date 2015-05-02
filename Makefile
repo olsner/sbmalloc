@@ -51,10 +51,10 @@ malloc.so: malloc.cpp
 malloc_debug.so: malloc.cpp
 	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -shared -o $@ $< $(LDSOFLAGS)
 
-test: malloc.cpp
+test: test.cpp
 	$(HUSH_CXX) $(CXX) $(FASTCXXFLAGS) -o $@ $< $(LDFLAGS) -DTEST
 
-debugtest: malloc.cpp
+debugtest: test.cpp
 	$(HUSH_CXX_DEBUG) $(CXX) $(DEBUGCXXFLAGS) -o $@ $< $(LDFLAGS) -DTEST
 
 printf_test: xprintf.cpp
