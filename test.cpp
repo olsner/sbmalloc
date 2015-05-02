@@ -86,13 +86,11 @@ static void selftest_realloc()
 	free(buffer);
 }
 
-static void selftest()
+static void selftest(size_t iters)
 {
-	const size_t DELAY = 1000;
+	const size_t DELAY = 10000;
 	const size_t NTESTS = 1000000;
 	const size_t MAXALLOC = 4097;
-
-	size_t iters = 1;
 
 	void* ptrs[DELAY] = {0};
 	for (size_t i = 0; i < DELAY; i++)
@@ -130,7 +128,7 @@ int main(int argc, const char *argv[])
 {
 	const int c = getcount(argc, argv);
 	printf("Running test for %d iterations\n", c);
-	for (int n = c; n--;) selftest();
+	for (int n = c; n--;) selftest(1);
 	printf("Allocated %zu bytes (%zu per iteration)\n", total_alloced, total_alloced / c);
 	printf("\"OK, dumping left-over state:\"!\n");
 	if (dump_pages) dump_pages();
