@@ -332,9 +332,9 @@ static void* get_page()
 	}
 	else
 	{
-		g_added_pages++;
 		debug("Free-list empty, allocating fresh page\n", ret);
 		ret = mmap(0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+		g_added_pages++;
 	}
 	add_used_pages(1);
 	debug("get_page: %p\n", ret);
@@ -410,6 +410,7 @@ static void* get_pages(size_t n)
 	else
 	{
 		ret = mmap(0, n * PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+		g_added_pages += n;
 		add_used_pages(n);
 	}
 	debug("get_pages: %ld pages: %p\n", n, ret);
@@ -992,6 +993,12 @@ static void free_unlocked(void *ptr)
 // of hysteresis mechanism.
 static const size_t SPARE_PAGES = 1024;
 
+#if 1
+#define trim_debug(...) (void)0
+#else
+#define trim_debug(...) (void)0
+#endif
+
 // Some of the things we want here:
 // 1. Collect the amount of unused memorytime between two measurements. The
 //    maximum actual usage in this time represents the minimum amount we should
@@ -1010,6 +1017,12 @@ static const size_t SPARE_PAGES = 1024;
 //    memory ready for next time the working set increases.
 int malloc_trim(size_t pad)
 {
+	// Should be a small enough value that it "never matters" if we waste this
+	// amount of memory. 1MB chosen somewhat arbitrarily.
+	// This is supposed to prevent churn just trimming handfuls of pages over
+	// and over.
+	const size_t MIN_SPARES = 256;
+	const size_t MIN_TRIM = 256;
 	size_t free_pages, spare_pages_wanted, added_pages, used_pages, max_pages;
 	{
 		SCOPELOCK();
@@ -1020,35 +1033,40 @@ int malloc_trim(size_t pad)
 		used_pages = g_used_pages;
 		g_added_pages = 0;
 		g_max_pages = g_used_pages;
+
+		size_t upper_spare = max_pages - used_pages;
+		size_t lower_spare = added_pages;
+		size_t orig_spare = spare_pages_wanted;
+		spare_pages_wanted = lower_spare + orig_spare + upper_spare;
+		spare_pages_wanted /= 3;
+		if (spare_pages_wanted < added_pages) spare_pages_wanted = added_pages;
+		if (spare_pages_wanted < MIN_SPARES) spare_pages_wanted = MIN_SPARES;
+		trim_debug("Trim: spare adjustment %zu .. %zu .. %zu => %zu\n",
+				lower_spare, orig_spare, upper_spare, spare_pages_wanted);
+		g_spare_pages_wanted = spare_pages_wanted;
 	}
 
-	if (!free_pages) {
+	if (!free_pages)
+	{
 		// Nothing to do.
 		return 0;
 	}
-	// Set trim interval to 0 to disable the timer.
-	// Some ideas on interval:
-	// - 0 if there was nothing to do. free() will arm the timer later.
-	//   (But perhaps it's better to keep the timer but increase the interval
-	//   every time nothing happens, to avoid free() doing anything expensive.
-	//   It would "just" need to poke a flag to see if the timer is already
-	//   scheduled.)
-	// - 1 otherwise. Assume we did only a little work (freed 10% of free pages
-	//   or whatever).
-	int trim_timer_interval = 1;
 	int pages_trimmed = 0;
 
-	printf("Trim: %zu free pages, %zu spare wanted.\n",
+	trim_debug("Trim: %zu free pages, %zu spare wanted.\n",
 			free_pages, spare_pages_wanted);
-	printf("Trim: %zu added, %zu used now, %zd max since last\n",
-			added_pages, used_pages, max_pages);
-
-	// Adjust spare_pages_wanted upwards if we had added_pages
-	// Adjust spare_pages_wanted downwards if max_pages is less than used_pages
+	trim_debug("Trim: %zu added, %zu used now, %zd max since last, %zu used+free\n",
+			added_pages, used_pages, max_pages, used_pages + free_pages);
 
 	size_t spare_pages_now = (free_pages + spare_pages_wanted) >> 1;
-	printf("Trim: Aiming for %zu spares (freeing %zu).\n",
+	trim_debug("Trim: Aiming for %zu spares (freeing %zd).\n",
 			spare_pages_now, free_pages - spare_pages_now);
+	if (free_pages - spare_pages_now < MIN_TRIM)
+	{
+		trim_debug("Trim: Less than MIN_TRIM, skipping.\n");
+		return 0;
+	}
+
 	while (free_pages > spare_pages_now)
 	{
 		u8* block_start;
@@ -1074,13 +1092,14 @@ int malloc_trim(size_t pad)
 			while (last_page + 4096 == block_start);
 
 			g_n_free_pages = free_pages;
+			// End of lock scope
 		}
-		// End of lock scope
-		printf("Trim: Freeing %zu pages.\n", (block_end - block_start) / PAGE_SIZE);
-		munmap(block_start, block_end - block_start);
+
+		trim_debug("Trim: Freeing %zu pages.\n", (block_end - block_start) / PAGE_SIZE);
+		int res = munmap(block_start, block_end - block_start);
+		if (res != 0) perror("munmap");
 	}
 
-	set_timer(trim_timer_interval);
 	return pages_trimmed;
 }
 
@@ -1088,9 +1107,21 @@ static volatile sig_atomic_t timer_is_scheduled = 0;
 static void timer_function(union sigval)
 {
 	timer_is_scheduled = false;
-	xprintf("Trim: timer triggered\n");
+	trim_debug("Trim: timer triggered\n");
 	int trimmed = malloc_trim(0);
-	xprintf("Trim: %d pages trimmed\n", trimmed);
+	// Set trim interval to 0 to disable the timer.
+	// Some ideas on interval:
+	// - 0 if there was nothing to do. free() will arm the timer later.
+	//   (But perhaps it's better to keep the timer but increase the interval
+	//   every time nothing happens, to avoid free() doing anything expensive.
+	//   It would "just" need to poke a flag to see if the timer is already
+	//   scheduled.)
+	// - 1 otherwise. Assume we did only a little work (freed 10% of free pages
+	//   or whatever).
+	int trim_timer_interval = 1;
+	trim_debug("Trim: %d pages trimmed\n", trimmed);
+	(void)trimmed;
+	set_timer(trim_timer_interval);
 }
 
 static void init_timer() __attribute__((constructor));
