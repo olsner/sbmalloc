@@ -174,18 +174,21 @@ struct splay_tree
 		return node;
 	}
 
+	static Sp find_max(Sp node)
+	{
+		if (node) while (node->right) node = node->right;
+		return node;
+	}
+
 	Sp get_min() const
 	{
 		return min;
 	}
 
 	// Note: No splay here(?), assuming we'll not do this very often.
-	Sp get_max()
+	Sp get_max() const
 	{
-		assert(root);
-		Sp cur = root;
-		while (cur->right) cur = cur->right;
-		return cur;
+		return find_max(root);
 	}
 
 	// NB! Destructively updates 'node' and puts it in either the smaller or
@@ -313,6 +316,11 @@ template<typename S>
 static void remove_to_end(splay_tree<S>& t, u8* start)
 {
 	t.remove_to_end((S*)start);
+}
+template<typename S>
+static S* get_max(const splay_tree<S>& p)
+{
+	return p.get_max();
 }
 #if 0
 static void dump_heap(splay_tree& t)
