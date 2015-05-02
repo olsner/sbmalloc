@@ -19,6 +19,9 @@
 #define XPRINTF_LINKAGE
 #endif
 
+#ifndef xprintf
+XPRINTF_LINKAGE void xprintf(const char* fmt, ...);
+#endif
 XPRINTF_LINKAGE void xfprintf(FILE* fp, const char* fmt, ...);
 XPRINTF_LINKAGE void xvfprintf(FILE* file, const char* fmt, va_list ap);
 

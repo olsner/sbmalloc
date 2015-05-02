@@ -61,18 +61,18 @@ namespace mallock
 {
 	pthread_spinlock_t spinlock;
 
-	void init()
+	static void init()
 	{
 		int res = pthread_spin_init(&spinlock, PTHREAD_PROCESS_PRIVATE);
 		xassert(res == 0);
 	}
-	void lock()
+	static void lock()
 	{
 		init_lock();
 		int res = pthread_spin_lock(&spinlock);
 		xassert(res == 0);
 	}
-	void unlock()
+	static void unlock()
 	{
 		init_lock();
 		int res = pthread_spin_unlock(&spinlock);
@@ -84,15 +84,12 @@ namespace mallock
 {
 	static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-	void init()
-	{
-	}
-	void lock()
+	static void lock()
 	{
 		int res = pthread_mutex_lock(&mutex);
 		xassert(res == 0);
 	}
-	void unlock()
+	static void unlock()
 	{
 		int res = pthread_mutex_unlock(&mutex);
 		xassert(res == 0);
@@ -102,14 +99,10 @@ namespace mallock
 #error Choose your poison
 #endif
 #ifdef NEED_INIT_LOCK
-pthread_once_t mallock_init = PTHREAD_ONCE_INIT;
-static void init_lock_cb()
-{
-	mallock::init();
-}
 void init_lock()
 {
-	pthread_once(&mallock_init, init_lock_cb);
+	static pthread_once_t mallock_init = PTHREAD_ONCE_INIT;
+	pthread_once(&mallock_init, mallock::init);
 }
 #endif
 #endif
@@ -459,7 +452,7 @@ static void print_pageinfo(pageinfo* page)
 	printf("%d x %db, %d free\n", page->chunks, page->size, page->chunks_free);
 }
 
-size_t page_allocated_space(pageinfo* page)
+static size_t page_allocated_space(pageinfo* page)
 {
 	return (page->chunks - page->chunks_free) * page->size;
 }

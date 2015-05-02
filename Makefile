@@ -9,7 +9,7 @@ endif
 CXXFLAGS = \
 	-fpic -DPIC -fvisibility=hidden -fvisibility-inlines-hidden \
 	-fno-rtti -fno-exceptions -fomit-frame-pointer \
-	-Wall -g
+	-Wall -Wmissing-declarations -g
 FASTCXXFLAGS = $(CXXFLAGS) \
 	-Os -march=native \
 	-fno-unwind-tables -fno-asynchronous-unwind-tables
