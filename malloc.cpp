@@ -18,45 +18,9 @@
 
 #include <pthread.h>
 
-#define PAGE_SHIFT 12
-#define PAGE_SIZE (1 << PAGE_SHIFT)
+extern "C" void dump_pages() __attribute__((visibility("default")));
 
-static void panic1();
-static void panic2() __attribute__((noreturn));
-static void dump_pages();
-#define assert_failed(e, file, line) panic("Assertion failed! %s:%d: %s", file, line, e)
-#define xassert(e) if (likely(e)); else assert_failed(#e, __FILE__, __LINE__)
-#define xassert_abort(e) if (likely(e)); else abort()
-#define panic(fmt, ...) do { \
-	panic1(); \
-	xfprintf(stderr, "PANIC: " fmt "\n", ## __VA_ARGS__); \
-	panic2(); } while (0);
-
-typedef uint8_t u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-
-#if defined DEBUG
-#define assert xassert
-#else
-#define assert(...) (void)0
-#endif
-
-#define likely(x) __builtin_expect(!!(x), 1)
-#define unlikely(x) __builtin_expect(!!(x), 0)
-
-#define STATIC_XPRINTF
-#include "xprintf.cpp"
-
-#ifdef DEBUG
-#define debug xprintf
-#define IFDEBUG(X) X
-#else
-#define debug(...) (void)0
-#define IFDEBUG(X) /* nothing */
-#endif
-#define printf xprintf
+#include "utils.h"
 
 //#define LOG_MMAP
 #if defined(DEBUG) || defined(LOG_MMAP)
@@ -337,25 +301,6 @@ static size_t get_magic_page_size(pageinfo* info, void* ptr);
 #define LAST_MAGIC_PAGE ((pageinfo*)5)
 #define IS_MAGIC_PAGE(page) ((page) && ((page) < LAST_MAGIC_PAGE))
 
-void panic1()
-{
-	static bool panicked = false;
-	if (panicked)
-	{
-		xprintf("Recursive panic. Aborting.\n");
-		abort();
-	}
-	panicked++;
-}
-
-void panic2()
-{
-	dump_pages();
-	fflush(stdout);
-	fflush(stderr);
-	abort();
-}
-
 static size_t large_size_ix(size_t size_)
 {
 	assert(size_ <= 2048);
@@ -519,7 +464,7 @@ size_t page_allocated_space(pageinfo* page)
 	return (page->chunks - page->chunks_free) * page->size;
 }
 
-static void dump_pages()
+void dump_pages()
 {
 	printf("First, dump chunk-pages:\n");
 	bool corrupt = false;
@@ -1068,3 +1013,22 @@ static void free_unlocked(void *ptr)
 	}
 #endif
 }
+
+#if defined(DEBUG) || defined(TEST)
+static void ix_test() __attribute__((constructor));
+void ix_test()
+{
+	for (size_t i = 1; i < PAGE_SIZE / 2; i++)
+	{
+		size_t ix = size_ix(i);
+		xassert(ix < N_SIZES);
+		xassert(i <= ix_size(ix));
+	}
+	for (size_t i = 4; i < PAGE_SHIFT-1; i++)
+	{
+		size_t ix = size_ix(1 << i);
+		xassert(ix < N_SIZES);
+		xassert((1u << i) == ix_size(ix));
+	}
+}
+#endif

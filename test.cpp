@@ -1,4 +1,6 @@
-#include "malloc.cpp"
+extern "C" void dump_pages() __attribute__((weak));
+
+#include "utils.h"
 
 static size_t total_alloced = 0;
 
@@ -91,21 +93,6 @@ static void selftest()
 	const size_t MAXALLOC = 4097;
 
 	size_t iters = 1;
-	if (const char *iterenv = getenv("TEST_ITERATIONS"))
-		iters = atoi(iterenv);
-
-	for (size_t i = 1; i < PAGE_SIZE / 2; i++)
-	{
-		size_t ix = size_ix(i);
-		xassert(ix < N_SIZES);
-		xassert(i <= ix_size(ix));
-	}
-	for (size_t i = 4; i < PAGE_SHIFT-1; i++)
-	{
-		size_t ix = size_ix(1 << i);
-		xassert(ix < N_SIZES);
-		xassert((1u << i) == ix_size(ix));
-	}
 
 	void* ptrs[DELAY] = {0};
 	for (size_t i = 0; i < DELAY; i++)
@@ -146,6 +133,6 @@ int main(int argc, const char *argv[])
 	for (int n = c; n--;) selftest();
 	printf("Allocated %zu bytes (%zu per iteration)\n", total_alloced, total_alloced / c);
 	printf("\"OK, dumping left-over state:\"!\n");
-	dump_pages();
+	if (dump_pages) dump_pages();
 	printf("\"OK\"!\n");
 }
