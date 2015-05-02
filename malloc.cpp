@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <malloc.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -256,11 +257,15 @@ typedef TREE(freepage_node) freepage_heap;
 
 static freepage_heap g_free_pages;
 static size_t g_n_free_pages;
+static size_t g_spare_pages_wanted = 1024;
 static chunkpage_heap g_chunk_pages[N_SIZES];
 static uintptr_t g_first_page;
 static uintptr_t g_n_pages;
 // Assumes mostly contiguous pages...
 static pageinfo** g_pages;
+static timer_t g_timerid;
+
+static void set_timer(int sec);
 
 static void set_pageinfo(void* page, pageinfo* info);
 static pageinfo* get_pageinfo(void* ptr);
@@ -333,23 +338,10 @@ static void add_to_freelist(void* page)
 	set_pageinfo(page, MAGIC_PAGE_FREE);
 }
 
-// 4MB is not a lot to keep laying around. But there should rather be some kind
-// of hysteresis mechanism.
-static const size_t SPARE_PAGES = 1024;
-
 static void free_page(void* page)
 {
-	if (g_n_free_pages > SPARE_PAGES)
-	{
-		debug("Free page %p: Have spares - unmapping.\n", page);
-		set_pageinfo(page, NULL);
-		munmap(page, PAGE_SIZE);
-	}
-	else
-	{
-		debug("Free page %p: Not enough spares, caching.\n", page);
-		add_to_freelist(page);
-	}
+	add_to_freelist(page);
+	// TODO Start trim timer (if necessary)
 	//dump_pages();
 }
 
@@ -360,9 +352,9 @@ static void free_magic_page(pageinfo* magic, void* ptr)
 	size_t npages = get_magic_page_size(magic, ptr);
 	size_t reusepages = 0;
 	debug("Free: Page %p (%ld pages)\n", ptr, npages);
-	if (g_n_free_pages < SPARE_PAGES)
+	if (g_n_free_pages < g_spare_pages_wanted)
 	{
-		reusepages = SPARE_PAGES - g_n_free_pages;
+		reusepages = g_spare_pages_wanted - g_n_free_pages;
 		if (reusepages < npages)
 		{
 			npages -= reusepages;
@@ -985,6 +977,120 @@ static void free_unlocked(void *ptr)
 		}
 	}
 #endif
+}
+
+// 4MB is not a lot to keep laying around. But there should rather be some kind
+// of hysteresis mechanism.
+static const size_t SPARE_PAGES = 1024;
+
+// Some of the things we want here:
+// 1. Collect the amount of unused memorytime between two measurements. The
+//    maximum actual usage in this time represents the minimum amount we should
+//    have had allocated. Any excess is unused. (The maximum usage may have
+//    been at any time between the measurements and this is not accounted for.)
+// 2. Collect the amount of extra memory allocated in the time period.
+//
+// 1. Gives us an indication of how much unneeded memory we have, try to
+//    reduce this to a small amount. e.g.
+//    max-use + spare pages = target value,
+//    d = actual - target,
+//    free up to d/2 each iteration, at least d/4.
+// 2. Gives us an indication of how much we've over-freed? But it will also
+//    happen naturally as a change in the working set size.
+//    Every time we hit the ceiling, increase spare_pages to try to have more
+//    memory ready for next time the working set increases.
+int malloc_trim(size_t pad)
+{
+	size_t free_pages, spare_pages_wanted;
+	{
+		SCOPELOCK();
+		free_pages = g_n_free_pages;
+		spare_pages_wanted = g_spare_pages_wanted;
+	}
+
+	if (!free_pages) {
+		// Nothing to do.
+		return 0;
+	}
+	// Set trim interval to 0 to disable the timer.
+	// Some ideas on interval:
+	// - 0 if there was nothing to do. free() will arm the timer later.
+	//   (But perhaps it's better to keep the timer but increase the interval
+	//   every time nothing happens, to avoid free() doing anything expensive.
+	//   It would "just" need to poke a flag to see if the timer is already
+	//   scheduled.)
+	// - 1 otherwise. Assume we did only a little work (freed 10% of free pages
+	//   or whatever).
+	int trim_timer_interval = 1;
+	int pages_trimmed = 0;
+
+	debug("Trim: %zu free pages.\n", g_n_free_pages);
+	while (free_pages > spare_pages_wanted)
+	{
+		u8* block_start;
+		u8* block_end;
+		{
+		SCOPELOCK();
+
+		u8* last_page = (u8*)get_max(g_free_pages);
+		block_end = last_page + PAGE_SIZE;
+
+		do
+		{
+			remove(g_free_pages, (freepage_node*)last_page);
+			g_n_free_pages--;
+			set_pageinfo(last_page, 0);
+			pages_trimmed++;
+
+			block_start = last_page;
+			last_page = (u8*)get_max(g_free_pages);
+		}
+		while (last_page + 4096 == block_start);
+	
+		free_pages = g_n_free_pages;
+		spare_pages_wanted = g_spare_pages_wanted;
+		}
+		// End of lock scope
+		munmap(block_start, block_end - block_start);
+	}
+
+	set_timer(trim_timer_interval);
+	return 0;
+}
+
+static volatile sig_atomic_t timer_is_scheduled;
+static void timer_function(union sigval)
+{
+	timer_is_scheduled = false;
+	malloc_trim(0);
+}
+
+static void init_timer() __attribute__((constructor));
+static void init_timer()
+{
+	sigevent sigevt;
+	memset(&sigevt, 0, sizeof(sigevt));
+	sigevt.sigev_notify = SIGEV_THREAD;
+	sigevt.sigev_notify_function = timer_function;
+	int res = timer_create(CLOCK_MONOTONIC, &sigevt, &g_timerid);
+	if (res != 0) {
+		perror("malloc timer_create");
+		exit(1);
+	}
+}
+// Only has an effect if the timer is previously unscheuled.
+static void set_timer(int sec)
+{
+	if (timer_is_scheduled) {
+		return;
+	}
+	// TODO Set these so that all malloc timers (at the same interval) sync up.
+	itimerspec timerspec = { { sec, 0 }, { 0, 0 } };
+	int res = timer_settime(g_timerid, 0 /* flags */, &timerspec, NULL);
+	if (res != 0) {
+		perror("timer_settime");
+	}
+	timer_is_scheduled = 1;
 }
 
 #if defined(DEBUG) || defined(TEST)
