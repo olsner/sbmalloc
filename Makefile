@@ -10,6 +10,7 @@ CXXFLAGS = \
 	-fpic -DPIC -fvisibility=hidden -fvisibility-inlines-hidden \
 	-fno-rtti -fno-exceptions -fomit-frame-pointer \
 	-Wall -Wmissing-declarations -g
+CXXFLAGS += -std=c++11
 FASTCXXFLAGS = $(CXXFLAGS) \
 	-Os -march=native \
 	-fno-unwind-tables -fno-asynchronous-unwind-tables

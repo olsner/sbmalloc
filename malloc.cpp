@@ -48,12 +48,8 @@ static void* realloc_unlocked(void* ptr, size_t new_size);
 #define FREE_CLEAR_MEM 0xdd
 #endif
 
-#ifndef TEST
-#define THREAD_SAFE
 #define USE_SPINLOCKS
-#endif
 
-#ifdef THREAD_SAFE
 #if defined(USE_SPINLOCKS)
 #define NEED_INIT_LOCK
 static void init_lock();
@@ -105,14 +101,12 @@ void init_lock()
 	pthread_once(&mallock_init, mallock::init);
 }
 #endif
-#endif
 
 class scopelock
 {
-	scopelock(const scopelock&);
-	scopelock& operator=(const scopelock&);
+	scopelock(const scopelock&) = delete;
+	scopelock& operator=(const scopelock&) = delete;
 public:
-#ifdef THREAD_SAFE
 	scopelock()
 	{
 		mallock::lock();
@@ -121,23 +115,9 @@ public:
 	{
 		mallock::unlock();
 	}
-#endif
 };
 
-#ifdef THREAD_SAFE
 #define SCOPELOCK(e) scopelock scopelock_ ## e
-#elif defined(TEST)
-#define SCOPELOCK(e) (void)0
-#else
-static pthread_t get_owner()
-{
-	static pthread_t g_owner = 0;
-	if (!g_owner)
-		g_owner = pthread_self();
-	return g_owner;
-}
-#define SCOPELOCK(e) xassert_abort(pthread_equal(get_owner(), pthread_self()))
-#endif
 
 #if 1
 #include "splay_tree.cpp"
