@@ -890,6 +890,10 @@ int posix_memalign(void** ret, size_t align, size_t size)
 
 void* calloc(size_t n, size_t sz)
 {
+	if (!mul_safe(n, sz)) {
+		errno = ENOMEM;
+		return NULL;
+	}
 	size_t size = n * sz;
 	void* ptr = malloc(size);
 	if (likely(ptr)) memset(ptr, 0, size);

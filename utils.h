@@ -58,3 +58,14 @@ void panic2()
 	abort();
 }
 
+#define MUL_NO_OVERFLOW (size_t(1) << (sizeof(size_t) * 4))
+
+static inline bool mul_safe(size_t x, size_t y)
+{
+	if ((x >= MUL_NO_OVERFLOW || y >= MUL_NO_OVERFLOW) &&
+		y > 0 && SIZE_MAX / y < x)
+	{
+		return false;
+	}
+	return true;
+}
