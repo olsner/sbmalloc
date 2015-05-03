@@ -37,8 +37,6 @@ The basic principle is segregated storage, with bins for 16..256 bytes in
 For each class, one page is allocated and divided into N-byte chunks, with
 metadata for the page allocated separately. Metadata includes the number of
 free/allocated chunks, the size of each chunk, and a bitmap of used chunks.
-Metadata is allocated with malloc, but this works out with a special case for
-only one size class.
 
 Each size class has its own list of non-full pages, sorted by the address of
 the page. malloc picks the first free chunk from the lowest-address page on the

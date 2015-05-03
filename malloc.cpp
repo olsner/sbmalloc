@@ -702,6 +702,8 @@ static pageinfo* new_chunkpage(size_t size)
 	size_t bitmapwords = (nchunks + 63) / 64;
 	pageinfo* ret = NULL;
 	size_t pisize = sizeof(pageinfo) + 8 * bitmapwords;
+	// If malloc(pisize) would end up needing another chunk page, looping back
+	// here, allocate a whole extra page instead to bootstrap.
 	if (!g_chunk_pages[size_ix(pisize)])
 	{
 		ret = (pageinfo*)get_page();
