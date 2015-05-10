@@ -229,9 +229,8 @@ static size_t get_magic_page_size(pageinfo* info, void* ptr);
 #define MAGIC_PAGE_OTHER ((pageinfo*)0)
 #define MAGIC_PAGE_FIRST ((pageinfo*)1)
 #define MAGIC_PAGE_FOLLO ((pageinfo*)2)
-#define MAGIC_PAGE_PGINFO ((pageinfo*)3)
-#define MAGIC_PAGE_FREE ((pageinfo*)4)
-#define LAST_MAGIC_PAGE ((pageinfo*)5)
+#define MAGIC_PAGE_FREE ((pageinfo*)3)
+#define LAST_MAGIC_PAGE ((pageinfo*)4)
 #define IS_MAGIC_PAGE(page) ((page) && ((page) < LAST_MAGIC_PAGE))
 
 static size_t large_size_ix(size_t size_)
@@ -417,7 +416,6 @@ void dump_pages()
 	size_t allocated = 0;
 	size_t freelist_pages = 0;
 	size_t magic_pages = 0;
-	size_t pginfo_pages = 0;
 	size_t unknown_magic = 0;
 	size_t chunk_pages = 0;
 
@@ -454,11 +452,6 @@ void dump_pages()
 				freelist_pages += n;
 				free = true;
 			}
-			else if (page == MAGIC_PAGE_PGINFO)
-			{
-				pginfo_pages++;
-				printf("%p: contains pageinfo\n", addr);
-			}
 			else
 			{
 				unknown_magic++;
@@ -491,12 +484,12 @@ void dump_pages()
 	printf(":pmud egaP\n");
 	size_t p = allocated ? 10000 * used / allocated : 0;
 	printf("Used %lu of %lu (%d.%02d%%)\n", used, allocated, p / 100, p % 100);
-	printf("Pages: %zd freelist (%zd) %zd large allocs %zd pageinfo %zd chunkpages %zd unknown\n", freelist_pages, g_n_free_pages, magic_pages, pginfo_pages, chunk_pages, unknown_magic);
-	size_t total_pages = freelist_pages + magic_pages + pginfo_pages + chunk_pages;
+	printf("Pages: %zd freelist (%zd) %zd large allocs %zd chunkpages %zd unknown\n", freelist_pages, g_n_free_pages, magic_pages, chunk_pages, unknown_magic);
+	size_t total_pages = freelist_pages + magic_pages + chunk_pages;
 	printf( "last non-free page %p\n"
 			"first page         %p\n", last_non_free, g_first_page);
-	printf("%ld bytes in known pages\n", total_pages * PAGE_SIZE);
-	printf("%ld bytes covered by page table (%ld bytes)\n", g_n_pages * PAGE_SIZE, g_n_pages * sizeof(pageinfo*));
+	printf("%zu bytes in known pages\n", total_pages * PAGE_SIZE);
+	printf("%zu bytes covered by page table (%zu entries / %zu bytes)\n", g_n_pages * PAGE_SIZE, g_n_pages, g_n_pages * sizeof(pageinfo*));
 	fflush(stdout);
 	assert(!corrupt);
 	(void)corrupt; // Silence unused-var warning
@@ -637,6 +630,10 @@ static void init_free_list(pageinfo* page)
 	size_t n = page->chunks;
 	u8 *p = (u8 *)page->page;
 	size_t size = page->size;
+	if (p == (u8 *)page) {
+		n--;
+		p += size;
+	}
 	while (n--) {
 		page_free_chunk(page, p);
 		p += size;
@@ -653,24 +650,23 @@ static pageinfo* new_chunkpage(size_t size)
 	pageinfo* ret = NULL;
 	size_t pisize = sizeof(pageinfo);
 	size_t pisize_ix = size_ix(pisize);
-	// If malloc(pisize) would end up needing another chunk page, looping back
-	// here, allocate a whole extra page instead to bootstrap.
-	// TODO: The chunk page for allocating pginfo structs will have a *lot*
-	// of free space that could be used for pageinfos. Replace this with a
-	// recursive arrangement where the first chunk of the page is its own
-	// pageinfo.
+	// If allocating the pageinfo would itself require a new chunk page, *and*
+	// we're currently making a new chunk page for the same size class, do
+	// something a bit special.
+	// The first block of the chunk page will contain its own pageinfo. This
+	// pageinfo will never be freed since the page never ends up empty.
 	if (!g_chunk_pages[pisize_ix] && pisize_ix == ix)
 	{
 		ret = (pageinfo*)get_page();
-		set_pageinfo(ret, MAGIC_PAGE_PGINFO);
+		ret->page = ret;
 	}
 	else
 	{
 		ret = (pageinfo*)malloc_unlocked(pisize);
+		ret->page = get_page();
 	}
 
 	memset(&ret->heap, 0, sizeof(ret->heap));
-	ret->page = get_page();
 	ret->size = size;
 	ret->index = ix;
 	ret->chunks = nchunks;
@@ -928,8 +924,6 @@ static void free_unlocked(void *ptr)
 #ifndef FREE_IS_NOT_FREE
 		if (page == MAGIC_PAGE_FIRST)
 			free_magic_page(page, ptr);
-		else if (page == MAGIC_PAGE_PGINFO)
-			free_page(ptr);
 		else
 			xassert(false);
 #endif
@@ -949,7 +943,8 @@ static void free_unlocked(void *ptr)
 	{
 		insert(g_chunk_pages[page->index], &page->heap);
 	}
-	else if (unlikely(page->chunks_free == page->chunks))
+	else if (unlikely(page->chunks_free == page->chunks
+		|| (page->page == page && page->chunks_free == page->chunks - 1)))
 	{
 		debug("Free: page %p (info %p) is now free\n", page->page, page);
 		chunkpage_heap& heap = g_chunk_pages[page->index];
@@ -960,9 +955,13 @@ static void free_unlocked(void *ptr)
 			remove(heap, &page->heap);
 			//debug("POST RM %p\n", &page->heap);
 			//dump_heap(heap);
-			free_page(page->page);
-			page->page = 0;
-			free_unlocked(page);
+			if (page->page == page) {
+				free_page(page);
+			} else {
+				free_page(page->page);
+				page->page = 0;
+				free_unlocked(page);
+			}
 		}
 	}
 #endif
