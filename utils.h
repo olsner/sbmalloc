@@ -46,7 +46,7 @@ static void panic(const char *fmt, ...)
 		xprintf("Recursive panic. Aborting.\n");
 		abort();
 	}
-	panicked++;
+	panicked = true;
 
 	va_list ap;
 	va_start(ap, fmt);
