@@ -17,6 +17,7 @@ DEBUGCXXFLAGS = $(CXXFLAGS) \
 	-DDEBUG \
 	-ftrapv -funwind-tables
 LDFLAGS = -lrt -ldl -lpthread -Wl,-Bsymbolic -Wl,--gc-sections
+LDFLAGS += -Wl,-z,max-page-size=0x1000
 LDSOFLAGS = $(LDFLAGS) -Wl,-no-undefined -Wl,-Bsymbolic
 GHCFLAGS = -O2 -fvia-c
 DEPFLAGS = -MP -MT $@ $(addprefix -MT ,$(TARGETS))
