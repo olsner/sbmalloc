@@ -5,7 +5,10 @@
 
 // TODO Mark printf-like for format warnings
 static void panic(const char *fmt, ...) __attribute__((noreturn));
-#define assert_failed(e, file, line) panic("Assertion failed! %s:%d: %s", file, line, e)
+static void assert_failed(const char *e, const char *file, int line) __attribute__((noreturn));
+static void assert_failed(const char *e, const char *file, int line) {
+	panic("Assertion failed! %s:%d: %s", file, line, e);
+}
 #define xassert(e) if (likely(e)); else assert_failed(#e, __FILE__, __LINE__)
 #define xassert_abort(e) if (likely(e)); else abort()
 
