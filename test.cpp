@@ -1,6 +1,4 @@
-extern "C" void dump_pages() __attribute__((weak));
-
-#include "utils.h"
+#include "malloc.cpp"
 
 static size_t total_alloced = 0;
 
@@ -133,6 +131,6 @@ int main(int argc, const char *argv[])
 	for (int n = c; n--;) selftest();
 	printf("Allocated %zu bytes (%zu per iteration)\n", total_alloced, total_alloced / c);
 	printf("\"OK, dumping left-over state:\"!\n");
-	if (dump_pages) dump_pages();
+	dump_pages();
 	printf("\"OK\"!\n");
 }
