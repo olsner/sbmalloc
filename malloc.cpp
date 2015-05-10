@@ -173,12 +173,9 @@ struct pageinfo
 	u16 chunks_free;
 	u8 index; // index into array of pages
 
-	/**
-	 * 1-32 bytes of bitmap data. A set bit means *free* chunk.
-	 */
-	u8 bitmap[];
-
-	// TODO merge bitmap into page?
+	// Index of first free chunk. If chunks_free is non-zero, otherwise invalid.
+	// Each chunk contains one byte to link to the next free chunk.
+	u8 first_free;
 };
 #define pageinfo_from_heap(heap_) \
 	((pageinfo*)((char*)(heap_) - offsetof(pageinfo, heap)))
@@ -187,85 +184,28 @@ static bool page_filled(pageinfo* page)
 {
 	return !page->chunks_free;
 }
-static size_t clear_first_set_bit(u8* bitmap, size_t maxbit)
-{
-	unsigned maxbyte = 8 * ((maxbit + 63u) / 64u);
-	u8* start = bitmap;
-	u64 found;
-
-	while (maxbyte)
-	{
-		if (likely(found = *(u64*)bitmap))
-		{
-			goto found64;
-		}
-		bitmap += 8;
-		maxbyte -= 8;
-	}
-	panic("No free chunks found?");
-
-found64:
-#ifdef __x86_64__
-	u64 ix;
-	__asm__("bsf %1, %0" : "=r" (ix) : "r" (found));
-	*(u64*)bitmap = found ^ ((u64)1 << ix);
-	return ix + ((bitmap - start) << 3);
-#else
-	size_t n = bitmap - start;
-
-	u32 temp = found;
-	if (!likely((u32)found))
-		n += 4, temp = found >> 32;
-	if (!likely((u16)temp))
-		n += 2, temp >>= 16;
-	if (!likely((u8)temp))
-		n++;
-
-	n <<= 3;
-	u64 mask = (u64)1 << (n & (7 * 8));
-	u64 maskmask = (u64)0xff << (n & (7 * 8));
-	do
-	{
-		assert(mask == ((u64)1 << (n & 63)));
-		if (mask & found)
-		{
-			*(u64*)bitmap = found & ~mask;
-			return n;
-		}
-		mask <<= 1;
-		n++;
-	}
-	while (mask & maskmask);
-	panic("No bits set in word?");
-#endif
-}
-static void set_bit(u8* const bitmap, const size_t ix)
-{
-#ifdef __x86_64__
-	__asm__("btsq %1, %0" : "+m" (*(u64*)bitmap) : "r" (ix));
-#else
-	const u8 mask = 1 << (ix & 7);
-	const size_t byte = ix >> 3;
-
-	assert(!(bitmap[byte] & mask));
-	bitmap[byte] |= mask;
-#endif
-}
 static void* page_get_chunk(pageinfo* page)
 {
 	assert(page->chunks_free);
 	page->chunks_free--;
-	size_t n = clear_first_set_bit(page->bitmap, page->chunks);
+	size_t n = page->first_free;
 	assert(n * page->size < PAGE_SIZE);
-	return (u8*)page->page + (n * page->size);
+	u8 *p = (u8*)page->page + n * page->size;
+	page->first_free = page->chunks_free ? *p : 0;
+	assert(page->first_free < page->chunks);
+	return p;
 }
 static void page_free_chunk(pageinfo* page, void* ptr)
 {
 	size_t offset_in_page = (u8*)ptr - (u8*)page->page;
 	size_t ix = offset_in_page;
 	ix /= page->size; // FIXME store inverse or something instead
+	assert(ix < page->chunks);
+	assert(!(offset_in_page % page->size));
 	debug("Freeing %p in %p (size %d)\n", ptr, page->page, page->size);
-	set_bit(page->bitmap, ix);
+	*(u8 *)ptr = page->first_free;
+	page->first_free = ix;
+	assert(page->first_free < page->chunks);
 	page->chunks_free++;
 }
 
@@ -692,6 +632,17 @@ static void set_pageinfo(void* page, pageinfo* info)
 #endif
 }
 
+static void init_free_list(pageinfo* page)
+{
+	size_t n = page->chunks;
+	u8 *p = (u8 *)page->page;
+	size_t size = page->size;
+	while (n--) {
+		page_free_chunk(page, p);
+		p += size;
+	}
+}
+
 static pageinfo* new_chunkpage(size_t size)
 {
 	size_t ix = size_ix(size);
@@ -699,12 +650,16 @@ static pageinfo* new_chunkpage(size_t size)
 	size = ix_size(ix);
 
 	size_t nchunks = 4096/size;
-	size_t bitmapwords = (nchunks + 63) / 64;
 	pageinfo* ret = NULL;
-	size_t pisize = sizeof(pageinfo) + 8 * bitmapwords;
+	size_t pisize = sizeof(pageinfo);
+	size_t pisize_ix = size_ix(pisize);
 	// If malloc(pisize) would end up needing another chunk page, looping back
 	// here, allocate a whole extra page instead to bootstrap.
-	if (!g_chunk_pages[size_ix(pisize)])
+	// TODO: The chunk page for allocating pginfo structs will have a *lot*
+	// of free space that could be used for pageinfos. Replace this with a
+	// recursive arrangement where the first chunk of the page is its own
+	// pageinfo.
+	if (!g_chunk_pages[pisize_ix] && pisize_ix == ix)
 	{
 		ret = (pageinfo*)get_page();
 		set_pageinfo(ret, MAGIC_PAGE_PGINFO);
@@ -717,14 +672,14 @@ static pageinfo* new_chunkpage(size_t size)
 	memset(&ret->heap, 0, sizeof(ret->heap));
 	ret->page = get_page();
 	ret->size = size;
-//	ret->shift = ix_shift(ix);
-	ret->chunks = nchunks;
-	ret->chunks_free = nchunks;
 	ret->index = ix;
-
-	memset(ret->bitmap, 0, 8 * bitmapwords);
-	memset(ret->bitmap, 0xff, nchunks / 8);
-	ret->bitmap[nchunks/8] = (1 << (nchunks & 7)) - 1;
+	ret->chunks = nchunks;
+	// Start out with all chunks allocated, then free them one by one. This
+	// is a bit inefficient (we could build the structure all at once rather
+	// than execute the free operation many times), but it's obviously correct.
+	ret->chunks_free = 0;
+	ret->first_free = 0;
+	init_free_list(ret);
 
 	set_pageinfo(ret->page, ret);
 
