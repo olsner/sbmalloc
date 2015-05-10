@@ -3,15 +3,11 @@
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 
-static void panic1();
-static void panic2() __attribute__((noreturn));
+// TODO Mark printf-like for format warnings
+static void panic(const char *fmt, ...) __attribute__((noreturn));
 #define assert_failed(e, file, line) panic("Assertion failed! %s:%d: %s", file, line, e)
 #define xassert(e) if (likely(e)); else assert_failed(#e, __FILE__, __LINE__)
 #define xassert_abort(e) if (likely(e)); else abort()
-#define panic(fmt, ...) do { \
-	panic1(); \
-	xfprintf(stderr, "PANIC: " fmt "\n", ## __VA_ARGS__); \
-	panic2(); } while (0);
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -39,7 +35,7 @@ typedef uint64_t u64;
 #endif
 #define printf xprintf
 
-void panic1()
+static void panic(const char *fmt, ...)
 {
 	static bool panicked = false;
 	if (panicked)
@@ -48,15 +44,24 @@ void panic1()
 		abort();
 	}
 	panicked++;
-}
 
-void panic2()
-{
+	va_list ap;
+	va_start(ap, fmt);
+	xvfprintf(stderr, fmt, ap);
+	va_end(ap);
+
 	dump_pages();
+
+	va_list aq;
+	va_start(aq, fmt);
+	xvfprintf(stderr, fmt, aq);
+	va_end(aq);
+
 	fflush(stdout);
 	fflush(stderr);
 	abort();
 }
+#define panic(fmt, ...) panic(fmt "\n", ## __VA_ARGS__)
 
 #define MUL_NO_OVERFLOW (size_t(1) << (sizeof(size_t) * 4))
 
