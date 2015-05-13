@@ -277,6 +277,7 @@ static pageinfo** g_pages;
 static timer_t g_timerid;
 
 static void set_timer(int sec);
+static void set_timer_on_free();
 
 static void set_pageinfo(void* page, pageinfo* info);
 static pageinfo* get_pageinfo(void* ptr);
@@ -953,6 +954,8 @@ static void free_unlocked(void *ptr)
 {
 	if (unlikely(!ptr)) return;
 
+	set_timer_on_free();
+
 	debug("X FREE %p\n", ptr);
 
 	pageinfo* page = get_pageinfo(ptr);
@@ -1150,9 +1153,11 @@ static void init_timer()
 		perror("malloc timer_create");
 		exit(1);
 	}
-	set_timer(1);
+	timer_is_scheduled = false;
+	// Re-init the timer in the child.
+	pthread_atfork(NULL, NULL, init_timer);
 }
-// Only has an effect if the timer is previously unscheuled.
+// Only has an effect if the timer is previously unscheduled.
 static void set_timer(int sec)
 {
 	if (timer_is_scheduled) {
@@ -1167,6 +1172,9 @@ static void set_timer(int sec)
 		perror("timer_settime");
 	}
 	timer_is_scheduled = true;
+}
+static void set_timer_on_free() {
+	set_timer(1);
 }
 
 #if defined(DEBUG) || defined(TEST)
