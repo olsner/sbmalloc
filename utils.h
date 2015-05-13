@@ -31,13 +31,13 @@ typedef uint64_t u64;
 #include "xprintf.cpp"
 
 #ifdef DEBUG
-#define debug xprintf
+#define debug(...) xfprintf(stderr, __VA_ARGS__)
 #define IFDEBUG(X) X
 #else
 #define debug(...) (void)0
 #define IFDEBUG(X) /* nothing */
 #endif
-#define printf xprintf
+#define printf(...)  xfprintf(stderr, __VA_ARGS__)
 
 void panic1()
 {
