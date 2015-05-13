@@ -25,6 +25,7 @@ extern "C" {
 	// Exported only by us
 	void dump_pages() EXPORT;
 	// Not marked as visible by malloc.h.
+	struct mallinfo mallinfo() EXPORT;
 	int malloc_trim(size_t pad) EXPORT;
 }
 
@@ -266,6 +267,7 @@ static freepage_heap g_free_pages;
 static size_t g_n_free_pages;
 static size_t g_spare_pages_wanted;
 static size_t g_max_pages, g_added_pages, g_used_pages;
+static size_t g_used_bytes;
 
 static chunkpage_heap g_chunk_pages[N_SIZES];
 static uintptr_t g_first_page;
@@ -373,6 +375,7 @@ static void free_magic_page(pageinfo* magic, void* ptr)
 	size_t npages = get_magic_page_size(magic, ptr);
 	size_t reusepages = 0;
 	debug("Free: Page %p (%ld pages)\n", ptr, npages);
+	g_used_bytes -= npages * PAGE_SIZE;
 	reusepages = npages;
 	npages -= reusepages;
 	u8* page = (u8*)ptr;
@@ -775,6 +778,7 @@ static void *malloc_unlocked(size_t size)
 		debug("Allocating %ld from %ld fresh pages\n", size, npages);
 		void* ret = get_pages(npages);
 		xassert(ret);
+		g_used_bytes += npages * PAGE_SIZE;
 		debug("X ALLOC %p\n", ret);
 		return ret;
 	}
@@ -805,6 +809,7 @@ static void *malloc_unlocked(size_t size)
 		memset((u8*)ret + size, MALLOC_CLEAR_MEM_AFTER, page->size - size);
 	}
 #endif
+	g_used_bytes += ix_size(size_ix(size));
 	return ret;
 }
 
@@ -969,6 +974,8 @@ static void free_unlocked(void *ptr)
 #ifdef FREE_CLEAR_MEM
 	memset(ptr, FREE_CLEAR_MEM, page->size);
 #endif
+
+	g_used_bytes -= page->size;
 
 #ifndef FREE_IS_NOT_FREE
 	page_free_chunk(page, ptr);
@@ -1180,3 +1187,44 @@ void ix_test()
 	}
 }
 #endif
+
+struct mallinfo mallinfo() {
+	struct mallinfo res;
+	memset(&res, 0, sizeof(res));
+
+	SCOPELOCK();
+
+	// Get some almost, but not completely, incorrect information about the
+	// heap, trying to emulate glibc's output.
+	//
+	// arena: bytes of "main" non-mmap heap space (including free)
+	// hblks: number of mmapped blocks in heap (including free)
+	// hblkhd: number of bytes in hblks
+	//
+	// ordblks: number of ordinary blocks (including free)
+	// uordblks: used bytes in ordinary blocks
+	// fordblks: free bytes in ordinary blocks
+	//
+	// smblks: number of fastbin blocks
+	// usmblks: -used bytes in fastbin blocks- "highwater mark" for allocated space.
+	// fsmblks: free bytes in fastbin blocks
+	//
+	// Fastbin blocks are not used by sbmalloc, and the corresponding fields
+	// are all 0. There is no "arena" in sbmalloc, so that will also be 0.
+	//
+	// Each used heap page is "one" ordinary block.
+
+	res.hblks = g_n_free_pages + g_used_pages;
+	res.hblkhd = res.hblks * PAGE_SIZE;
+
+	// Perhaps a more useful figure here would be the total count/size/free of
+	// *chunks* rather than their pages. Takes more counting though :)
+
+	res.ordblks = g_used_pages;
+	res.uordblks = g_used_bytes;
+	// Free space in allocated chunk pages. Does not include pages that are on
+	// the free-list. To get freelist size (in pages), take hblks - ordblks.
+	res.fordblks = res.ordblks * PAGE_SIZE - res.uordblks;
+
+	return res;
+}
