@@ -993,8 +993,8 @@ static void free_unlocked(void *ptr)
 // of hysteresis mechanism.
 static const size_t SPARE_PAGES = 1024;
 
-#if 1
-#define trim_debug(...) (void)0
+#if 0
+#define trim_debug(fmt, ...) xfprintf(stderr, "%d: " fmt, getpid(), ## __VA_ARGS__)
 #else
 #define trim_debug(...) (void)0
 #endif
