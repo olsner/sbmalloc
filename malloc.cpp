@@ -258,6 +258,13 @@ static void page_free_chunk(pageinfo* page, void* ptr)
 	page->chunks_free++;
 }
 
+struct chunk_stats
+{
+	size_t allocated;
+	size_t freed;
+	size_t total_waste;
+};
+
 #define N_SIZES (128/16+4)
 
 typedef NODE freepage_node;
@@ -270,6 +277,7 @@ static size_t g_max_pages, g_added_pages, g_used_pages;
 static size_t g_used_bytes;
 
 static chunkpage_heap g_chunk_pages[N_SIZES];
+static chunk_stats g_chunk_stats[N_SIZES];
 static uintptr_t g_first_page;
 static uintptr_t g_n_pages;
 // Assumes mostly contiguous pages...
@@ -784,7 +792,8 @@ static void *malloc_unlocked(size_t size)
 		return ret;
 	}
 
-	chunkpage_heap* pagep = g_chunk_pages + size_ix(size);
+	const size_t ix = size_ix(size);
+	chunkpage_heap* pagep = g_chunk_pages + ix;
 	chunkpage_node* min = get_min(*pagep);
 	pageinfo* page = pageinfo_from_heap(min);
 	if (unlikely(!min))
@@ -810,7 +819,10 @@ static void *malloc_unlocked(size_t size)
 		memset((u8*)ret + size, MALLOC_CLEAR_MEM_AFTER, page->size - size);
 	}
 #endif
-	g_used_bytes += ix_size(size_ix(size));
+	const size_t used_size = ix_size(ix);
+	g_chunk_stats[ix].allocated++;
+	g_chunk_stats[ix].total_waste += used_size - size;
+	g_used_bytes += used_size;
 	return ret;
 }
 
@@ -979,6 +991,7 @@ static void free_unlocked(void *ptr)
 #endif
 
 	g_used_bytes -= page->size;
+	g_chunk_stats[page->index].freed++;
 
 #ifndef FREE_IS_NOT_FREE
 	page_free_chunk(page, ptr);
@@ -1196,11 +1209,26 @@ void ix_test()
 }
 #endif
 
+static void dump_chunk_stats() {
+	for (size_t i = 0; i < N_SIZES; i++) {
+		chunk_stats& stats = g_chunk_stats[i];
+		const size_t size = ix_size(i);
+		printf("Chunk %zu [size %zu]: %zu allocs, %zu frees, %zu of %zu bytes wasted\n",
+			i, size, stats.allocated, stats.freed, stats.total_waste, stats.allocated * size);
+		const size_t waste_pm = (1000 * stats.total_waste) / (stats.allocated * size);
+		printf("Chunk %zu [size %zu]: waste %d.%d%%\n",
+			i, size, waste_pm / 10, waste_pm % 10);
+	}
+}
+
 struct mallinfo mallinfo() {
 	struct mallinfo res;
 	memset(&res, 0, sizeof(res));
 
 	SCOPELOCK();
+
+//	dump_chunk_stats();
+//	dump_pages();
 
 	// Get some almost, but not completely, incorrect information about the
 	// heap, trying to emulate glibc's output.
