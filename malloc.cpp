@@ -1241,7 +1241,7 @@ struct mallinfo mallinfo() {
 
 	SCOPELOCK();
 
-//	dump_chunk_stats();
+	dump_chunk_stats();
 //	dump_pages();
 
 	// Get some almost, but not completely, incorrect information about the
