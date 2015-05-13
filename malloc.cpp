@@ -266,6 +266,7 @@ struct chunk_stats
 };
 
 #define N_SIZES (128/16+4)
+#define MAX_CHUNK_PAGE_SIZE (2048)
 
 typedef NODE freepage_node;
 typedef TREE(freepage_node) freepage_heap;
@@ -453,9 +454,34 @@ static size_t page_allocated_space(pageinfo* page)
 	return (page->chunks - page->chunks_free) * page->size;
 }
 
+static void dump_chunk_stats() {
+	size_t total_size = 0, total_waste = 0;
+	for (size_t i = 0; i < N_SIZES; i++) {
+		chunk_stats& stats = g_chunk_stats[i];
+		const size_t size = ix_size(i);
+		printf("Chunk %3zu [size %4zu]: %zu allocs, %zu frees, %zu of %zu bytes wasted\n",
+			i, size, stats.allocated, stats.freed, stats.total_waste, stats.allocated * size);
+		const size_t waste_pm =
+			stats.allocated ? (1000 * stats.total_waste) / (stats.allocated * size) : 0;
+		const size_t ext_waste_pm = 1000 * (PAGE_SIZE % size) / PAGE_SIZE;
+		printf("Chunk %3zu [size %4zu]: waste %d.%d%% (int) %d.%d%% (ext per page)\n",
+			i, size, waste_pm / 10, waste_pm % 10, ext_waste_pm / 10, ext_waste_pm % 10);
+
+		total_size += stats.allocated * size;
+		total_waste += stats.total_waste;
+		// total_ext_waste += // needs to know the number of (currently) used
+		// pages to multiply the waste by...
+	}
+	const size_t waste_pm = total_size ? (1000 * total_waste) / total_size : 0;
+	printf("All chunks: %zu of %zu bytes wasted, %d.%d%%\n",
+			total_waste, total_size, waste_pm / 10, waste_pm % 10);
+}
+
 void dump_pages()
 {
-	printf("First, dump chunk-pages:\n");
+	printf("Size-class statistics:\n");
+	dump_chunk_stats();
+	printf("Current (head-of-heap) chunk-pages:\n");
 	bool corrupt = false;
 	for (size_t i = 0; i < N_SIZES; i++)
 	{
@@ -464,7 +490,7 @@ void dump_pages()
 		{
 			pageinfo* page = pageinfo_from_heap(min);
 			size_t size = ix_size(i);
-			printf("%p: %ld, size %ld: ", page->page, i, size);
+			printf("%p: %zu, size %zu: ", page->page, i, size);
 			print_pageinfo(page);
 		}
 	}
@@ -781,7 +807,7 @@ static void *malloc_unlocked(size_t size)
 #endif
 	}
 
-	if (unlikely(size > PAGE_SIZE / 2))
+	if (unlikely(size > MAX_CHUNK_PAGE_SIZE))
 	{
 		size_t npages = (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
 		debug("Allocating %ld from %ld fresh pages\n", size, npages);
@@ -1208,18 +1234,6 @@ void ix_test()
 	}
 }
 #endif
-
-static void dump_chunk_stats() {
-	for (size_t i = 0; i < N_SIZES; i++) {
-		chunk_stats& stats = g_chunk_stats[i];
-		const size_t size = ix_size(i);
-		printf("Chunk %zu [size %zu]: %zu allocs, %zu frees, %zu of %zu bytes wasted\n",
-			i, size, stats.allocated, stats.freed, stats.total_waste, stats.allocated * size);
-		const size_t waste_pm = (1000 * stats.total_waste) / (stats.allocated * size);
-		printf("Chunk %zu [size %zu]: waste %d.%d%%\n",
-			i, size, waste_pm / 10, waste_pm % 10);
-	}
-}
 
 struct mallinfo mallinfo() {
 	struct mallinfo res;
