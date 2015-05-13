@@ -19,7 +19,14 @@
 
 #include <pthread.h>
 
-extern "C" void dump_pages() __attribute__((visibility("default")));
+#define EXPORT __attribute__((visibility("default")))
+
+extern "C" {
+	// Exported only by us
+	void dump_pages() EXPORT;
+	// Not marked as visible by malloc.h.
+	int malloc_trim(size_t pad) EXPORT;
+}
 
 #include "utils.h"
 
