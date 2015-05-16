@@ -20,9 +20,11 @@
 #endif
 
 #ifndef xprintf
-XPRINTF_LINKAGE void xprintf(const char* fmt, ...);
+XPRINTF_LINKAGE void xprintf(const char* fmt, ...)
+		__attribute__((format(printf, 1, 2)));
 #endif
-XPRINTF_LINKAGE void xfprintf(FILE* fp, const char* fmt, ...);
+XPRINTF_LINKAGE void xfprintf(FILE* fp, const char* fmt, ...)
+		__attribute__((format(printf, 2, 3)));
 XPRINTF_LINKAGE void xvfprintf(FILE* file, const char* fmt, va_list ap);
 
 static void format_num(FILE* file, int width, bool leading_zero, bool sign, int base, bool show_base, uintptr_t num)

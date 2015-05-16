@@ -275,7 +275,7 @@ static void* get_page()
 	}
 	else
 	{
-		debug("Free-list empty, allocating fresh page\n", ret);
+		debug("Free-list empty, allocating fresh page\n");
 		ret = mmap(0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	}
 	debug("get_page: %p\n", ret);
@@ -375,10 +375,10 @@ static void* get_pages(size_t n)
 	{
 		ret = mmap(0, n * PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	}
-	debug("get_pages: %ld pages: %p\n", n, ret);
+	debug("get_pages: %zu pages: %p\n", n, ret);
 	if (unlikely(ret == (void*)-1))
 	{
-		xprintf("get_pages: %ld pages: %p\n", n, ret);
+		xprintf("get_pages: %zu pages: %p\n", n, ret);
 		return NULL;
 	}
 	register_magic_pages(ret, n);
@@ -387,8 +387,8 @@ static void* get_pages(size_t n)
 
 static void print_pageinfo(pageinfo* page)
 {
-	printf("info %p: ", page);
-	printf("%d x %db, %d free\n", page->chunks, page->size, page->chunks_free);
+	printf("info %p: %d x %db, %d free\n", page,
+			page->chunks, page->size, page->chunks_free);
 }
 
 static size_t page_allocated_space(pageinfo* page)
@@ -447,7 +447,7 @@ void dump_pages()
 					pagep++;
 					n++;
 				}
-				printf("%p: %ld page(s) free-list\n", addr, n);
+				printf("%p: %zu page(s) free-list\n", addr, n);
 				addr += (n - 1) *PAGE_SIZE;
 				freelist_pages += n;
 				free = true;
@@ -483,11 +483,11 @@ void dump_pages()
 	}
 	printf(":pmud egaP\n");
 	size_t p = allocated ? 10000 * used / allocated : 0;
-	printf("Used %lu of %lu (%d.%02d%%)\n", used, allocated, p / 100, p % 100);
+	printf("Used %zu of %zu (%zu.%02zu%%)\n", used, allocated, p / 100, p % 100);
 	printf("Pages: %zd freelist (%zd) %zd large allocs %zd chunkpages %zd unknown\n", freelist_pages, g_n_free_pages, magic_pages, chunk_pages, unknown_magic);
 	size_t total_pages = freelist_pages + magic_pages + chunk_pages;
 	printf( "last non-free page %p\n"
-			"first page         %p\n", last_non_free, g_first_page);
+			"first page         %p\n", last_non_free, (void *)g_first_page);
 	printf("%zu bytes in known pages\n", total_pages * PAGE_SIZE);
 	printf("%zu bytes covered by page table (%zu entries / %zu bytes)\n", g_n_pages * PAGE_SIZE, g_n_pages, g_n_pages * sizeof(pageinfo*));
 	fflush(stdout);
@@ -602,7 +602,7 @@ static void set_pageinfo(void* page, pageinfo* info)
 			memcpy(new_pages, g_pages, g_n_pages * sizeof(pageinfo*));
 		}
 		munmap(g_pages, g_n_pages * sizeof(pageinfo*));
-		debug("Moved page table from %p (%ld) %p to %p (%ld) %p\n", g_pages, g_n_pages, old_first_page, new_pages, required / sizeof(pageinfo*), g_first_page);
+		debug("Moved page table from %p (%zu) %zu to %p (%zu) %zu\n", g_pages, g_n_pages, old_first_page, new_pages, required / sizeof(pageinfo*), g_first_page);
 
 #ifdef DEBUG
 		if (g_n_pages)
