@@ -474,7 +474,14 @@ void dump_pages()
 		}
 		else
 		{
-			//printf("%p: Not used (%p)\n", addr, page);
+			size_t n = 1;
+			while (pagep < end && !*pagep)
+			{
+				pagep++;
+				n++;
+			}
+			printf("%p: %zu page(s) hole\n", addr, n);
+			addr += (n - 1) *PAGE_SIZE;
 			free = true;
 		}
 		if (!free)
