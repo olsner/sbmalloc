@@ -211,10 +211,8 @@ static void page_free_chunk(pageinfo* page, void* ptr)
 
 #define N_SIZES (128/16+4)
 
-typedef NODE freepage_node;
-typedef TREE(freepage_node) freepage_heap;
-
-static freepage_heap g_free_pages;
+// Might not be free, but it's guaranteed that there are no free pages below it.
+static size_t g_first_free_page;
 static size_t g_n_free_pages;
 static chunkpage_heap g_chunk_pages[N_SIZES];
 static uintptr_t g_first_page;
@@ -266,11 +264,17 @@ static size_t ix_size(size_t ix)
 
 static void* get_page()
 {
-	void* ret = get_min(g_free_pages);
-	if (ret)
+	size_t free_page = g_first_free_page;
+	const size_t n = g_n_pages;
+	while (free_page < n && g_pages[free_page] != MAGIC_PAGE_FREE) {
+		free_page++;
+	}
+	void* ret;
+	if (free_page < n)
 	{
+		ret = (u8*)g_first_page + free_page * PAGE_SIZE;
 		debug("Unlinking %p from free-list\n", ret);
-		delete_min(g_free_pages);
+		g_first_free_page = free_page + 1;
 		g_n_free_pages--;
 	}
 	else
@@ -285,9 +289,11 @@ static void* get_page()
 static void add_to_freelist(void* page)
 {
 	debug("Adding %p to page free-list\n", page);
-	memset(page, 0, sizeof(freepage_node));
-	insert(g_free_pages, (freepage_node*)page);
-	//dump_heap(g_free_pages);
+	// Doing this for every page added to the free list is apparently pretty
+	// slow, so skip it.
+	//madvise(page, PAGE_SIZE, MADV_DONTNEED);
+	size_t n = ((uintptr_t)page - g_first_page) >> PAGE_SHIFT;
+	if (n < g_first_free_page) g_first_free_page = n;
 	g_n_free_pages++;
 	set_pageinfo(page, MAGIC_PAGE_FREE);
 }
