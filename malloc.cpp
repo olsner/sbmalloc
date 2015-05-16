@@ -378,7 +378,6 @@ static void* get_pages(size_t n)
 	debug("get_pages: %zu pages: %p\n", n, ret);
 	if (unlikely(ret == (void*)-1))
 	{
-		xprintf("get_pages: %zu pages: %p\n", n, ret);
 		return NULL;
 	}
 	register_magic_pages(ret, n);
@@ -745,7 +744,6 @@ static void *malloc_unlocked(size_t size)
 		size_t npages = (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
 		debug("Allocating %ld from %ld fresh pages\n", size, npages);
 		void* ret = get_pages(npages);
-		xassert(ret);
 		debug("X ALLOC %p\n", ret);
 		return ret;
 	}

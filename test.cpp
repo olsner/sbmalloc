@@ -84,6 +84,13 @@ static void selftest_realloc()
 	free(buffer);
 }
 
+static void selftest_limits()
+{
+	for (size_t n = 1; n < 2 * PAGE_SIZE; n++) {
+		xassert(malloc(-n) == NULL);
+	}
+}
+
 static void selftest()
 {
 	const size_t DELAY = 1000;
@@ -115,6 +122,7 @@ static void selftest()
 	}
 	
 	selftest_realloc();
+	selftest_limits();
 }
 
 static int getcount(int argc, const char *argv[])
