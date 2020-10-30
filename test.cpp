@@ -1,5 +1,9 @@
 #include "malloc.cpp"
 
+#include <random>
+#include <thread>
+#include <vector>
+
 static size_t total_alloced = 0;
 
 static void* test_malloc(size_t s)
@@ -17,14 +21,6 @@ static void* test_realloc(void *p, size_t s)
 #define malloc test_malloc
 #define realloc test_realloc
 #define calloc test_calloc
-
-static int32_t xrand()
-{
-	static int32_t m_w = 1246987127, m_z = 789456123;
-	m_z = 36969 * (m_z & 65535) + (m_z >> 16);
-	m_w = 18000 * (m_w & 65535) + (m_w >> 16);
-	return (m_z << 16) + m_w;  /* 32-bit result */
-}
 
 static void fill_pattern(void* buf_, size_t size)
 {
@@ -91,11 +87,13 @@ static void selftest_limits()
 	}
 }
 
-static void selftest()
+static void selftest(uint32_t seed)
 {
-	const size_t DELAY = 1000;
+	std::minstd_rand xrand { seed };
+
+	const size_t DELAY = 1024;
 	const size_t NTESTS = 1000000;
-	const size_t MAXALLOC = 4097;
+	const size_t MAXALLOC = 4096;
 
 	size_t iters = 1;
 
@@ -125,18 +123,39 @@ static void selftest()
 	selftest_limits();
 }
 
-static int getcount(int argc, const char *argv[])
+static int getintarg(int index, int argc, const char *argv[])
 {
 	int c = 0;
-	if (argc > 1) c = atoi(argv[1]);
+	if (argc > index) c = atoi(argv[index]);
 	return c > 0 ? c : 1;
+}
+
+namespace __gnu_cxx {
+	void __freeres();
 }
 
 int main(int argc, const char *argv[])
 {
-	const int c = getcount(argc, argv);
-	printf("Running test for %d iterations\n", c);
-	for (int n = c; n--;) selftest();
+	const int c = getintarg(1, argc, argv);
+	const int nthreads = getintarg(2, argc, argv);
+	printf("Running test for %d iterations in %d threads...\n", c, nthreads);
+	// Scope to clean up everything before getting to dump_pages
+	{
+		std::vector<std::thread> threads;
+		threads.reserve(nthreads);
+		for (int tid = 0; tid < nthreads; tid++)
+		{
+			const int seed_base = tid * c;
+			threads.emplace_back([c, seed_base]() {
+				for (int n = c; n--;) selftest(seed_base + n);
+			});
+		}
+		for (auto& thread: threads)
+		{
+			thread.join();
+		}
+	}
+	__gnu_cxx::__freeres();
 	printf("Allocated %zu bytes (%zu per iteration)\n", total_alloced, total_alloced / c);
 	printf("\"OK, dumping left-over state:\"!\n");
 	dump_pages();
