@@ -10,6 +10,7 @@ CXXFLAGS = \
 	-fpic -DPIC -fvisibility=hidden -fvisibility-inlines-hidden \
 	-fno-rtti -fno-exceptions -fomit-frame-pointer \
 	-Wall -Wmissing-declarations -g \
+	-no-pie \
 	-DMALLOC_SAFE_PRINTF
 FASTCXXFLAGS = $(CXXFLAGS) \
 	-Os -march=native \
