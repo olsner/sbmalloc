@@ -37,11 +37,11 @@ else
 all: $(TARGETS)
 endif
 
-HUSH_STRIP = @echo " [STRIP]\t$@";
-HUSH_DEP = @echo " [DEP]\t$<";
-HUSH_CXX = @echo " [CXX]\t$@";
-HUSH_CXX_DEBUG = @echo " [CXX]\t$@ [DEBUG]";
-HUSH_RM = @x_rm() { echo " [RM]\t$$@"; rm -f "$$@"; };
+HUSH_STRIP = @echo -e " [STRIP]\t$@";
+HUSH_DEP = @echo -e " [DEP]\t$<";
+HUSH_CXX = @echo -e " [CXX]\t$@";
+HUSH_CXX_DEBUG = @echo -e " [CXX]\t$@ [DEBUG]";
+HUSH_RM = @x_rm() { echo -e " [RM]\t$$@"; rm -f "$$@"; };
 RM = x_rm
 STRIP ?= strip
 
@@ -69,7 +69,7 @@ printf_test: xprintf.cpp
 
 %.stripped.so: %.so
 	$(HUSH_STRIP) $(STRIP) $(STRIPFLAGS) -o $@ $<
-	@echo " [STRIP]\t$@: `stat -c%s $@` bytes"
+	@echo -e " [STRIP]\t$@: `stat -c%s $@` bytes"
 
 clean:
 	$(HUSH_RM) $(RM) $(TARGETS) $(DEPFILES)
