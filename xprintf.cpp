@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <unistd.h>
 
 #ifdef STATIC_XPRINTF
 #define xprintf(...) xfprintf(stdout, __VA_ARGS__)
@@ -27,18 +28,61 @@ XPRINTF_LINKAGE void xfprintf(FILE* fp, const char* fmt, ...)
 		__attribute__((format(printf, 2, 3)));
 XPRINTF_LINKAGE void xvfprintf(FILE* file, const char* fmt, va_list ap);
 
+#ifdef MALLOC_SAFE_PRINTF
+static void xputc(char c, FILE* fp)
+{
+	const int fd = fileno_unlocked(fp);
+
+	// fd will be < 0 if the file object is e.g. a memory stream instead of an
+	// actual file.
+	if (fd < 0)
+	{
+		fputc_unlocked(c, fp);
+	}
+	else
+	{
+		// Apparently even fputc may allocate memory for the output buffer, so
+		// we have to work harder...
+		write(fd, &c, 1);
+	}
+}
+static void xwrite(const char* data, size_t n, FILE* fp)
+{
+	const int fd = fileno_unlocked(fp);
+
+	if (fd < 0)
+	{
+		fwrite_unlocked(data, 1, n, fp);
+	}
+	else
+	{
+		// TODO Check result and repeat write if not all data was written
+		write(fd, data, n);
+	}
+}
+#else
+static void xputc(int c, FILE* fp)
+{
+	fputc_unlocked(c, fp);
+}
+static void xwrite(const char* data, size_t n, FILE* fp)
+{
+	fwrite_unlocked(data, 1, n, fp);
+}
+#endif
+
 static void format_num(FILE* file, int width, bool leading_zero, bool sign, int base, bool show_base, uintptr_t num)
 {
 	if (sign && (intptr_t)num < 0)
 	{
 		num = -num;
-		fputc_unlocked('-', file);
+		xputc('-', file);
 	}
 	if (show_base)
 	{
 		assert(base == 16);
-		fputc_unlocked('0', file);
-		fputc_unlocked('x', file);
+		xputc('0', file);
+		xputc('x', file);
 	}
 	char buf[32];
 	memset(buf, 0, sizeof(buf));
@@ -54,12 +98,12 @@ static void format_num(FILE* file, int width, bool leading_zero, bool sign, int 
 		int c = leading_zero ? '0' : ' ';
 		while (len < (size_t)width--)
 		{
-			fputc_unlocked(c, file);
+			xputc(c, file);
 		}
 	}
 	while (len--)
 	{
-		fputc_unlocked(buf[len], file);
+		xputc(buf[len], file);
 	}
 }
 
@@ -75,17 +119,22 @@ static const char* read_width(const char* fmt, int* width)
 void xvfprintf(FILE* file, const char* fmt, va_list ap)
 {
 	flockfile(file);
+#ifdef MALLOC_SAFE_PRINTF
+	// Since we'll write directly to the file descriptor, flush any other
+	// output first.
+	fflush_unlocked(file);
+#endif
 	while (*fmt)
 	{
 		const char* nextformat = strchr(fmt, '%');
 		if (!nextformat)
 		{
-			fwrite_unlocked(fmt, 1, strlen(fmt), file);
+			xwrite(fmt, strlen(fmt), file);
 			break;
 		}
 		else
 		{
-			fwrite_unlocked(fmt, 1, nextformat - fmt, file);
+			xwrite(fmt, nextformat - fmt, file);
 			fmt = nextformat + 1;
 		}
 		bool is_long = false;
@@ -102,15 +151,15 @@ void xvfprintf(FILE* file, const char* fmt, va_list ap)
 			switch (*fmt++)
 			{
 			case '%':
-				fputc_unlocked('%', file);
+				xputc('%', file);
 				break;
 			case 's':
 			{
 				const char* arg = ARG(const char*);
 				if (arg)
-					fwrite_unlocked(arg, 1, strlen(arg), file);
+					xwrite(arg, strlen(arg), file);
 				else
-					fwrite_unlocked("(null)", 1, sizeof("(null)")-1, file);
+					xwrite("(null)", sizeof("(null)")-1, file);
 				break;
 			}
 			// 'o' is also unsigned, somewhat surprisingly
